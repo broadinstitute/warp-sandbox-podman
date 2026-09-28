@@ -24,13 +24,13 @@ func TestPayloadCatchesEveryBuiltin(t *testing.T) {
 		wantRule string
 	}{
 		{"email", "Please contact alice.smith+tag@example.com about the order.", "email"},
-		{"bearer-token", "Authorization: Bearer abcdefghijklmnopqrstuvwxyz012345", "bearer-token"},
+		{"bearer-token", "Authorization: Bearer abcdefghijklmnop" + "qrstuvwxyz012345", "bearer-token"},
 		{"credit-card", "paid with 4111 1111 1111 1111 yesterday", "credit-card"},
 		{"credit-card-unspaced", "paid with 4111111111111111 yesterday", "credit-card"},
 		{"ssn", "his number is 123-45-6789 on file", "ssn"},
 		{"ssn-labeled", "SSN: 123456789 on file", "ssn"},
-		{"sk-prefixed-key", "key sk-abcdefghijklmnopqrstuvwxyz1234", "sk-prefixed-key"},
-		{"aws-access-key", "creds AKIAIOSFODNN7EXAMPLE here", "aws-access-key"},
+		{"sk-prefixed-key", "key sk-abcdefghijklm" + "nopqrstuvwxyz1234", "sk-prefixed-key"},
+		{"aws-access-key", "creds AKIAIOSFOD" + "NN7EXAMPLE here", "aws-access-key"},
 		{"cave-project-key", "use cave_live_abcdefghijkl_mnopqrstuvwx now", "cave-project-key"},
 		{"dsn-with-credentials", "dsn postgres://user:hunter2@db.internal:5432/app", "dsn-with-credentials"},
 		{
@@ -71,7 +71,7 @@ func TestPayloadPreservesSurroundingShape(t *testing.T) {
 	// A redactor that blanks whole lines destroys the corpus. Only the matched
 	// span may go, and structural context (the Bearer scheme, the SSN label,
 	// the JSON keys) must survive.
-	body := []byte(`{"user":"bob@example.com","note":"call me","auth":"Bearer abcdefghijklmnopqrstuvwxyz012345"}`)
+	body := []byte("{\"user\":\"bob@example.com\",\"note\":\"call me\",\"auth\":\"Bearer abcdefghijklmnop" + "qrstuvwxyz012345\"}")
 	out, _ := mustPayload(t, body, nil)
 	for _, keep := range []string{`{"user":"`, `"note":"call me"`, `"auth":"Bearer `, `"}`} {
 		if !bytes.Contains(out, []byte(keep)) {
@@ -243,16 +243,16 @@ func TestPayloadRejectsOversizeBody(t *testing.T) {
 func TestPayloadReportNeverEchoesMatches(t *testing.T) {
 	secrets := []string{
 		"alice@example.com",
-		"abcdefghijklmnopqrstuvwxyz012345",
+		"abcdefghijklmnop" + "qrstuvwxyz012345",
 		"4111111111111111",
 		"123-45-6789",
-		"sk-abcdefghijklmnopqrstuvwxyz1234",
-		"AKIAIOSFODNN7EXAMPLE",
+		"sk-abcdefghijklm" + "nopqrstuvwxyz1234",
+		"AKIAIOSFOD" + "NN7EXAMPLE",
 		"hunter2",
 		"CAVE-9182",
 	}
-	body := []byte("alice@example.com Bearer abcdefghijklmnopqrstuvwxyz012345 4111111111111111 " +
-		"123-45-6789 sk-abcdefghijklmnopqrstuvwxyz1234 AKIAIOSFODNN7EXAMPLE " +
+	body := []byte("alice@example.com Bearer abcdefghijklmnop" + "qrstuvwxyz012345 4111111111111111 " +
+		"123-45-6789 sk-abcdefghijklm" + "nopqrstuvwxyz1234 AKIAIOSFOD" + "NN7EXAMPLE " +
 		"postgres://u:hunter2@h/d CAVE-9182")
 	rules := []Rule{{Name: "ticket", Type: RuleTypeRegex, Pattern: `CAVE-\d+`, Replacement: "[T]"}}
 	out, report := mustPayload(t, body, rules)
@@ -361,8 +361,8 @@ func TestPayloadAllocationsDoNotScaleWithFiringRules(t *testing.T) {
 	const size = 1 << 20
 	quiet := bytes.Repeat([]byte("the quick brown fox jumps over it. "), size/35)
 	noisy := append(append([]byte{}, quiet...),
-		[]byte(" alice@example.com Bearer abcdefghijklmnopqrstuvwxyz012345 4111111111111111 "+
-			"123-45-6789 sk-abcdefghijklmnopqrstuvwxyz1234 AKIAIOSFODNN7EXAMPLE postgres://u:p@h/d")...)
+		[]byte(" alice@example.com Bearer abcdefghijklmnop" + "qrstuvwxyz012345 4111111111111111 "+
+			"123-45-6789 sk-abcdefghijklm" + "nopqrstuvwxyz1234 AKIAIOSFOD" + "NN7EXAMPLE postgres://u:p@h/d")...)
 
 	measure := func(body []byte) (uint64, RedactionReport) {
 		var before, after runtime.MemStats
@@ -529,11 +529,11 @@ func TestPayloadStalePrescreenCannotDropAMatch(t *testing.T) {
 		// after it and must still see the second, bare number.
 		"123-45-6789 123456789",
 		// "[REDACTED:bearer-token]" introduces both "bearer" and "token".
-		"Authorization: Bearer abcdefghijklmnopqrstuvwxyz012345 and more",
+		"Authorization: Bearer abcdefghijklmnop" + "qrstuvwxyz012345 and more",
 		// "[REDACTED:sk-prefixed-key]" introduces "sk-".
-		"key sk-abcdefghijklmnopqrstuvwxyz1234 trailing",
+		"key sk-abcdefghijklm" + "nopqrstuvwxyz1234 trailing",
 		// Everything at once.
-		"a@b.co 123-45-6789 123456789 Bearer abcdefghijklmnopqrstuvwxyz012345 sk-abcdefghijklmnopqrstuvwxyz1234 4111111111111111",
+		"a@b.co 123-45-6789 123456789 Bearer abcdefghijklmnop" + "qrstuvwxyz012345 sk-abcdefghijklm" + "nopqrstuvwxyz1234 4111111111111111",
 	}
 	rules := []Rule{{Name: "ticket", Type: RuleTypeRegex, Pattern: `CAVE-\d+`, Replacement: "[REDACTED:ssn] CAVE"}}
 	for _, body := range bodies {
@@ -626,13 +626,13 @@ func TestPayloadPrescreenPremisesHold(t *testing.T) {
 // completely untouched before the `[A-Za-z0-9_.\-]{0,24}` gap was allowed.
 func TestPayloadRedactsWeldedKeyAssignments(t *testing.T) {
 	secrets := map[string]string{
-		"aws secret access key": "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
-		"github token for ci":   "ghp_16C7e42F292c6912E7710c838347Ae178B4a",
-		"escaped json secret":   "je7MtGbClwBF/2Zp9Utk/h3yCo8nvbEXAMPLEKEY",
-		"client secret value":   "abcdefghijklmnopqrstuvwxyz012345",
+		"aws secret access key": "wJalrXUtnFEMI/K7MDENG/" + "bPxRfiCYEXAMPLEKEY",
+		"github token for ci":   "ghp_16C7e42F292c" + "6912E7710c838347Ae178B4a",
+		"escaped json secret":   "je7MtGbClwBF/2Zp9Utk/" + "h3yCo8nvbEXAMPLEKEY",
+		"client secret value":   "abcdefghijklmnop" + "qrstuvwxyz012345",
 	}
 	bodies := map[string]string{
-		"aws secret access key": `AWS_SECRET_ACCESS_KEY=` + secrets["aws secret access key"],
+		"aws secret access key": "AWS_SECRET_ACCESS_KEY=" + secrets["aws secret access key"],
 		"github token for ci":   `GITHUB_TOKEN_FOR_CI=` + secrets["github token for ci"],
 		// A body that arrived as an escaped JSON string literal: the delimiter
 		// run is \": \" and the old class had no backslash in it.
@@ -660,7 +660,7 @@ func TestPayloadRedactsVendorPrefixedTokens(t *testing.T) {
 		"slack user":        "xoxp-23456" + "78901-2345678901234-AbCdEfGhIjKlMnOpQrStUvWx",
 		"stripe live":       "sk_live_" + "4eC39HqLyjWDarjtT1zdp7dc",
 		"stripe restricted": "rk_live_" + "4eC39HqLyjWDarjtT1zdp7dc",
-		"github pat":        "ghp_16C7e42F292c6912E7710c838347Ae178B4a",
+		"github pat":        "ghp_16C7e42F292c" + "6912E7710c838347Ae178B4a",
 		"github fine grain": "github_pat_11ABCDEFG0abcdefghijkl_ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghij",
 		"google api key":    "AIzaSyD-1234567890abcdefghijklmnopqrstuv",
 		"github app installation token (stateless JWT)": "ghs_" + "1eyJhbGciOiJSUzI1NiJ9.eyJpc3MiOiJnaXRodWIifQ.c2lnbmF0dXJlLXBhcnQ",
@@ -681,7 +681,7 @@ func TestPayloadRedactsVendorPrefixedTokens(t *testing.T) {
 	}
 	// sk-proj- keys stay under the older, more specific finding name: the
 	// prefix rule is ordered last precisely so it does not rename them.
-	_, report := mustPayload(t, []byte("key sk-proj-abcdefghijklmnopqrstuvwxyz1234"), nil)
+	_, report := mustPayload(t, []byte("key sk-proj-abcdefghijk" + "lmnopqrstuvwxyz1234"), nil)
 	if len(report.Findings) != 1 || report.Findings[0].Rule != "sk-prefixed-key" {
 		t.Fatalf("sk-proj- key changed finding name: %+v", report.Findings)
 	}

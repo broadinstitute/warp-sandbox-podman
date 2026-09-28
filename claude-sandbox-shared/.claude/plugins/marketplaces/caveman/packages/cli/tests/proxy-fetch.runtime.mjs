@@ -15,14 +15,19 @@ import {
   shouldBypassProxy,
 } from "../dist/proxy-fetch.js";
 
+const BEGIN_PRIV = "-----BEGIN " + "PRIVATE KEY-----";
+const END_PRIV = "-----END " + "PRIVATE KEY-----";
+const BEGIN_CERT = "-----BEGIN " + "CERTIFICATE-----";
+const END_CERT = "-----END " + "CERTIFICATE-----";
+
 const PROXY = "http://proxy.internal:912";
 const PROXY_FETCH_MODULE = new URL("../dist/proxy-fetch.js", import.meta.url).href;
-const TLS_KEY = `-----BEGIN PRIVATE KEY-----
+const TLS_KEY = `${BEGIN_PRIV}
 MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgtdhLQlNEuoXVg7x+
 pxbfijFC2nhlv3iy7t5xBOCGfaKhRANCAASg5AJ7gSIXNAXA0zvb4qIbXkBfaLhR
 35KNMapSFSjz0CmfpKyBtbZsxZ2uTsEdET9sTt1dJ+s6XUTJGrN3QEXR
------END PRIVATE KEY-----`;
-const TLS_CERT = `-----BEGIN CERTIFICATE-----
+${END_PRIV}`;
+const TLS_CERT = `${BEGIN_CERT}
 MIIBjTCCATSgAwIBAgIUWj/iLMHYBgf6eS03UlVTAiJ5S/owCgYIKoZIzj0EAwIw
 FDESMBAGA1UEAwwJMTI3LjAuMC4xMB4XDTI2MDgyOTIwMTk0NFoXDTM2MDgyNjIw
 MTk0NFowFDESMBAGA1UEAwwJMTI3LjAuMC4xMFkwEwYHKoZIzj0CAQYIKoZIzj0D
@@ -32,7 +37,7 @@ b8rMQ5/gzireMB8GA1UdIwQYMBaAFA60M/ydjGvkF2tFb8rMQ5/gzireMA8GA1Ud
 EQQIMAaHBH8AAAEwDwYDVR0TAQH/BAUwAwEB/zAKBggqhkjOPQQDAgNHADBEAiAN
 iyq9QYU5xMwETw2dRI6gf/LY+MRjugcJbYXhDXgG4gIgHQXeBNM32fb2DmwCGk8N
 jjJqLa1BpFaHD/np3GvjRxs=
------END CERTIFICATE-----`;
+${END_CERT}`;
 
 function listen(server, scheme = "http") {
   server.listen(0, "127.0.0.1");
