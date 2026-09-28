@@ -60,14 +60,14 @@
       "source": {
         "source": "github",
         "repo": "JuliusBrussee/caveman",
-        "ref": "v1.8.2"
+        "ref": "v2.7.0"
       }
     },
     "ponytail": {
       "source": {
         "source": "github",
         "repo": "DietrichGebert/ponytail",
-        "ref": "v4.8.4"
+        "ref": "v4.9.0"
       }
     }
   },

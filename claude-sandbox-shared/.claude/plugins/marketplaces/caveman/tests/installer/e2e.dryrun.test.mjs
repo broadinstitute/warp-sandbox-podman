@@ -18,7 +18,10 @@ function freshTmpDir() {
 test('dry-run --only claude prints plan and writes nothing', () => {
   const cfg = freshTmpDir();
   const r = spawnSync('node', [INSTALLER,
-    '--dry-run', '--only', 'claude', '--no-mcp-shrink', '--non-interactive',
+    // --with-hooks: since #392/#393 the default only wires standalone hooks
+    // when the plugin install fails. Force the hook-planning path so the
+    // "would install / would merge" assertions below are exercised.
+    '--dry-run', '--only', 'claude', '--with-hooks', '--no-mcp-shrink', '--non-interactive',
     '--config-dir', cfg,
   ], { encoding: 'utf8', env: { ...process.env, CLAUDE_CONFIG_DIR: cfg } });
   assert.equal(r.status, 0);
@@ -27,7 +30,7 @@ test('dry-run --only claude prints plan and writes nothing', () => {
   if (/Claude Code detected/.test(r.stdout)) {
     assert.match(r.stdout, /would run: claude plugin marketplace add/);
     assert.match(r.stdout, /would run: claude plugin install caveman@caveman/);
-    assert.match(r.stdout, /would mkdir -p .*\/hooks/);
+    assert.match(r.stdout, /would mkdir -p .*[\\\/]hooks/);
     assert.match(r.stdout, /would install .*caveman-activate\.js/);
     assert.match(r.stdout, /would merge SessionStart \+ UserPromptSubmit \+ statusline/);
   }

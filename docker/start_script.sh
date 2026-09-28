@@ -234,8 +234,20 @@ check_pin() {
   echo
 }
 # Keep in sync with claude-sandbox-shared/.claude/PLUGIN_PINS.md.
-check_pin caveman 63a91ecadbf4c4719a4602a5abb00883f9966034
-check_pin ponytail bc9ee949d5f439e8b9f3bb92c6d6d3d1e6ebd324
+check_pin caveman 8b0c1d3699b8d83e87fe4605b378da20c41555e0
+check_pin ponytail 0a4dd63ad4541f4f655c4108a295916f3c1d8fda
+
+# Ensure warp/AGENTS.md is loaded automatically into context by linking it to CLAUDE.md
+if [[ -f /workspace/warp/AGENTS.md && ! -e /workspace/CLAUDE.md ]]; then
+  ln -s warp/AGENTS.md /workspace/CLAUDE.md
+fi
+
+# Ensure warp/AGENTS.md points to warp-tools/AGENTS.md
+if [[ -f /workspace/warp/AGENTS.md && -d /workspace/warp-tools ]]; then
+  if ! grep -q "warp-tools/AGENTS.md" /workspace/warp/AGENTS.md; then
+    echo -e "\n\n## Other Repositories\n\nPlease also refer to [warp-tools/AGENTS.md](../warp-tools/AGENTS.md) for related tools and context." >> /workspace/warp/AGENTS.md
+  fi
+fi
 
 # Run claude:
 claude "$@"

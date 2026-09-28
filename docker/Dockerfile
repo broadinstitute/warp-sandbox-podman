@@ -41,7 +41,7 @@ RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | \
 # write-semantics change between unpinned builds is exactly the kind of
 # thing that produced the bind-mounted-credentials persistence bug
 # (see commit ee421d5).
-ENV CLAUDE_CODE_VERSION=2.1.200
+ENV CLAUDE_CODE_VERSION=2.1.283
 RUN npm install -g "@anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}" \
     && claude --version
 

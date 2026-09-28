@@ -63,8 +63,8 @@ REPO_URL="https://github.com/broadinstitute/fiss-mcp.git"
 # Pinned release. Bump together with anything that depends on new fiss-mcp
 # features. The marker file below keys off this string, so any change here
 # triggers a full reinstall on the next setup_host.sh run.
-FISS_MCP_REF="1.0.5"
-FISS_MCP_REF_COMMIT="ce8097b2126c17166eab565eea5fad8ca9cb5295"
+FISS_MCP_REF="1.0.6"
+FISS_MCP_REF_COMMIT="a4becf1cfadd0a94678f2383b6de9273a0bbebd5"
 
 # Interpreter version for the venv.
 #
