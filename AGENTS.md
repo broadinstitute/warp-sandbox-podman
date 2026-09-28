@@ -1,6 +1,6 @@
 # Agent Directives: warp-sandbox-podman
 
-Welcome to the `warp-sandbox-podman` repository. This repository defines the multi-user containerized sandbox environment for running agentic coding tools with host-level access to GPUs and NFS mounts.
+Welcome to the `warp-sandbox-podman` repository. This repository defines the multi-user containerized sandbox environment for running agentic coding tools on WARP.
 
 ## Documentation Index
 
