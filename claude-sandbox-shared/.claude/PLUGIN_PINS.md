@@ -52,7 +52,9 @@ The probe is non-blocking; it never wipes the cache automatically.
    ```bash
    rm -rf claude-sandbox-shared/.claude/plugins/marketplaces/caveman
    cp -a "$tmp/caveman" claude-sandbox-shared/.claude/plugins/marketplaces/caveman
-   rm -rf claude-sandbox-shared/.claude/plugins/marketplaces/caveman/.git
+   rm -rf claude-sandbox-shared/.claude/plugins/marketplaces/caveman/.git \
+          claude-sandbox-shared/.claude/plugins/marketplaces/caveman/tests \
+          claude-sandbox-shared/.claude/plugins/marketplaces/caveman/benchmarks
    ```
 4. Update `ref:` in `settings.json`, the SHA row in this table, AND the
    hardcoded SHA in `check_pin caveman <SHA>` near the bottom of
