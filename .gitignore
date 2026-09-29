@@ -1,3 +1,12 @@
+# Developer-local Claude Code config for working IN this repo. These hold
+# per-machine paths and personal permission allowlists — never commit them.
+# settings.local.json is Claude Code's own local-override convention;
+# settings.json is added here explicitly because Claude Code does NOT ignore it
+# by default (it treats it as a shared project file), and in this repo it must
+# not be committed — see AGENTS.md.
+/.claude/settings.json
+/.claude/settings.local.json
+
 # Per-instance state dirs are runtime — keep only the README placeholder.
 # Default hooks/settings come from claude-sandbox-shared/, not from any
 # instance dir.
@@ -19,7 +28,7 @@ claude-sandbox-shared/.claude/*
 !claude-sandbox-shared/.claude/skills/**
 # Vendor the caveman plugin source so a fresh clone has it without
 # network round-trips to JuliusBrussee/caveman at first session. Pinned
-# at v1.8.2 (commit 63a91eca...) — bump by replacing the tree in place
+# at v2.7.0 (commit 8b0c1d36...) — bump by replacing the tree in place
 # and updating PLUGIN_PINS.md. The plugins/cache/ dir stays gitignored;
 # claude-code rebuilds it from the vendored marketplaces tree on first
 # session.
@@ -27,7 +36,7 @@ claude-sandbox-shared/.claude/*
 !claude-sandbox-shared/.claude/plugins/marketplaces/
 !claude-sandbox-shared/.claude/plugins/marketplaces/caveman/
 !claude-sandbox-shared/.claude/plugins/marketplaces/caveman/**
-# Vendor ponytail same way — pinned at v4.8.4 (commit bc9ee949...).
+# Vendor ponytail same way — pinned at v4.9.0 (commit 0a4dd63a...).
 # See PLUGIN_PINS.md for bump procedure.
 !claude-sandbox-shared/.claude/plugins/marketplaces/ponytail/
 !claude-sandbox-shared/.claude/plugins/marketplaces/ponytail/**

@@ -255,9 +255,15 @@ is in [CONFIG.md](CONFIG.md#installing-packages).
 
 ### Updating an existing sandbox
 
-If you provisioned your account before the repository was renamed to `warp-sandbox-podman` and the default branch moved to `main`, you'll need to update the shared server checkout to pull in new changes (like newly seeded default repositories).
+Whenever the checkout gains new changes — newly seeded repos, a **plugin bump**
+(caveman/ponytail), hook or settings fixes, a new fiss-mcp — refresh your sandbox
+with the steps below. (If you also provisioned before the repo was renamed to
+`warp-sandbox-podman` and the default branch moved to `main`, step 1 fixes that
+too.)
 
-1. **Update the shared checkout:** (Run this on the shared VM, not in the container)
+1. **Update the shared checkout:** (Run this on the shared VM, not in the
+   container. Only whoever owns `/mnt/sandbox/repo` can pull it; if that is an
+   admin, they do this once for everyone.)
    ```bash
    cd /mnt/sandbox/repo
    git remote set-url origin https://github.com/broadinstitute/warp-sandbox-podman.git
@@ -266,13 +272,27 @@ If you provisioned your account before the repository was renamed to `warp-sandb
    git branch -u origin/main main
    git pull
    ```
+   If the image itself changed (anything under `docker/`), the admin also rebuilds
+   the shared image — see [SERVER.md](SERVER.md#updating-the-image-later). That is
+   separate from the per-user steps below.
 
-2. **Re-provision to get new repositories:**
-   Running the provisioning script again is safe and idempotent. It will skip over `warp` and `warp-tools` if you already have them, and clone any newly added repositories (like `optimus_starsolo_multiome`):
+2. **Re-provision — picks up new repos AND plugin/hook/settings updates.**
+   Re-running the provisioner is safe and idempotent. It skips repos you already
+   have and clones newly added ones (like `optimus_starsolo_multiome`), and it
+   re-syncs the checkout's Claude config into your `shared/.claude`: vendored
+   plugin bumps, hook fixes, skills, and `settings.json`. Your OAuth token and
+   session history are left untouched.
    ```bash
    cd /mnt/sandbox/repo
    ./scripts/provision-sandbox-user.sh
    ```
+   Run this from the host shell while you are **not** in a live sandbox session
+   (including a detached `tmux` one). It wipes the rebuildable plugin cache so
+   Claude Code re-resolves plugins at the new pins on your next launch, and a
+   container running against that directory at the same moment can see a
+   half-updated tree. Exit the sandbox first, re-provision, then relaunch — the
+   new plugins are live on that next launch, with your session resumable via
+   `--continue`.
 
 3. **Rebuild the host fiss-mcp venv:**
    ```bash
