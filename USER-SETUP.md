@@ -34,8 +34,18 @@ instance name and zone; nothing sets `$VM`/`$ZONE` for you, and the zone is a
 *zone*, not a region (`us-central1-c`, not `us-central1`).
 
 ```bash
-gcloud compute ssh <instance-name> --zone <zone>
+gcloud compute ssh <vm-username>@<instance-name> --zone <zone> --tunnel-through-iap
 ```
+
+`--tunnel-through-iap` is what makes this work off the Broad network: the VM's
+port 22 accepts only Broad IP ranges and Google's IAP range, so without it the
+connection fails with `connect to host ... port 22: Connection timed out`. (It
+needs IAP tunnel permission on the project; ask the admin if it is refused.)
+
+`<vm-username>@` matters when your laptop username differs from your VM account
+(e.g. `cox` locally, `rcox` on the VM). Without it gcloud uses the laptop name,
+and if that name has no key on file it silently creates a new account — see
+[SERVER.md](SERVER.md#ssh-access-and-firewall).
 
 If you are already on the VM — the Cloud Console *SSH* button works fine — skip
 this step. Running it from *inside* the VM fails with `Request had insufficient

@@ -2,6 +2,10 @@
 
 Welcome to the `warp-sandbox-podman` repository. This repository defines the multi-user containerized sandbox environment for running agentic coding tools on WARP.
 
+## Workflow
+
+This repo has one maintainer. **Commit directly to `main` and push to `origin`.** Do not create branches, open pull requests, or use GitHub integrations (`gh pr`, Actions, Dependabot merges) here; this overrides the general "push branches, never open PRs" rule in `~/AGENTS.md` for this repo only. Never push to the `upstream` remote — that is the original project this was forked from.
+
 ## Documentation Index
 
 Before making architectural changes or helping a user debug, please read the relevant documentation:
