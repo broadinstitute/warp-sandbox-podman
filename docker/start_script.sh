@@ -237,16 +237,40 @@ check_pin() {
 check_pin caveman 8b0c1d3699b8d83e87fe4605b378da20c41555e0
 check_pin ponytail 0a4dd63ad4541f4f655c4108a295916f3c1d8fda
 
-# Ensure warp/AGENTS.md is loaded automatically into context by linking it to CLAUDE.md
-if [[ -f /workspace/warp/AGENTS.md && ! -e /workspace/CLAUDE.md ]]; then
-  ln -s warp/AGENTS.md /workspace/CLAUDE.md
+# Agent instructions. warp/AGENTS.md is loaded by an @import in
+# ~/.claude/CLAUDE.md (claude-sandbox-shared/.claude/CLAUDE.md), so this script
+# writes nothing into /workspace and never touches a repo's files.
+#
+# One-time migration: the previous version of this script symlinked
+# /workspace/CLAUDE.md -> warp/AGENTS.md and appended an "Other Repositories"
+# section to warp/AGENTS.md, which dirtied every user's warp checkout (and
+# blocks their `git pull` once upstream edits that file). Undo exactly those two
+# changes and nothing else. Safe to delete once every user has booted this image.
+if [[ -L /workspace/CLAUDE.md && "$(readlink /workspace/CLAUDE.md)" == "warp/AGENTS.md" ]]; then
+  rm -f /workspace/CLAUDE.md
+  echo "agents-md: removed the old /workspace/CLAUDE.md symlink; warp/AGENTS.md is imported instead."
 fi
-
-# Ensure warp/AGENTS.md points to warp-tools/AGENTS.md
-if [[ -f /workspace/warp/AGENTS.md && -d /workspace/warp-tools ]]; then
-  if ! grep -q "warp-tools/AGENTS.md" /workspace/warp/AGENTS.md; then
-    echo -e "\n\n## Other Repositories\n\nPlease also refer to [warp-tools/AGENTS.md](../warp-tools/AGENTS.md) for related tools and context." >> /workspace/warp/AGENTS.md
+OLD_AGENTS_APPEND=$'\n\n## Other Repositories\n\nPlease also refer to [warp-tools/AGENTS.md](../warp-tools/AGENTS.md) for related tools and context.\n'
+# Revert only when the ENTIRE local change to warp/AGENTS.md is that appended
+# block: the file minus its tail must equal HEAD's version byte for byte.
+if [[ -f /workspace/warp/AGENTS.md ]] \
+   && ! git -C /workspace/warp diff --quiet HEAD -- AGENTS.md 2>/dev/null \
+   && cmp -s <(printf '%s' "$OLD_AGENTS_APPEND") <(tail -c "${#OLD_AGENTS_APPEND}" /workspace/warp/AGENTS.md) \
+   && cmp -s <(head -c "-${#OLD_AGENTS_APPEND}" /workspace/warp/AGENTS.md) \
+             <(git -C /workspace/warp show HEAD:AGENTS.md 2>/dev/null); then
+  if git -C /workspace/warp checkout -- AGENTS.md 2>/dev/null; then
+    echo "agents-md: reverted the section an older start_script appended to warp/AGENTS.md."
   fi
+fi
+# Anything else at /workspace/CLAUDE.md was written by a person or an agent (a
+# copy of AGENTS.md, /init output). Not ours to delete — say so loudly, because it
+# duplicates the imported warp/AGENTS.md and silently goes stale.
+if [[ -e /workspace/CLAUDE.md ]]; then
+  YEL=$'\033[1;33m' RST=$'\033[0m'
+  echo "${YEL}agents-md: WARNING — /workspace/CLAUDE.md exists.${RST}"
+  echo "${YEL}  warp/AGENTS.md is already loaded via ~/.claude/CLAUDE.md, so this file duplicates it${RST}"
+  echo "${YEL}  and goes stale. Agent guidance belongs in each repo's AGENTS.md. Delete CLAUDE.md${RST}"
+  echo "${YEL}  from your workspace directory on the host (see FAQ.md).${RST}"
 fi
 
 # Run claude:

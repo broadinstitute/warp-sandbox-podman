@@ -76,6 +76,37 @@ layers. See [Updating the image](SERVER.md#updating-the-image-later).
 
 ## Inside the container
 
+### Claude is not following `warp/AGENTS.md`, or `agents-md: WARNING — /workspace/CLAUDE.md exists`
+
+`warp/AGENTS.md` is loaded by an `@/workspace/warp/AGENTS.md` import in the
+sandbox's `~/.claude/CLAUDE.md` (from `claude-sandbox-shared/.claude/CLAUDE.md`),
+so it sits at the top of every session and nothing is written into `/workspace`.
+Check inside the sandbox with `/context`: its memory-files list should include
+`/workspace/warp/AGENTS.md`. If it does not, your `shared/.claude` predates the
+import — re-run `./scripts/provision-sandbox-user.sh`, which refreshes it.
+
+A `CLAUDE.md` at the top of your workspace is a copy of AGENTS.md (or `/init`
+output) made by a person or an agent. It is not needed, it duplicates the imported
+file, and it silently goes stale, so the container warns about it at boot rather
+than deleting it. Read it, move anything worth keeping into the relevant repo's
+`AGENTS.md`, then remove it on the host:
+
+```bash
+rm /mnt/sandbox/users/$USER/workspace/CLAUDE.md
+```
+
+Why not a `/workspace/CLAUDE.md` symlink, as this sandbox used to do: Claude Code
+reads AGENTS.md natively only in a project with no CLAUDE.md, and at startup only
+from the working directory and its parents. `warp/` is a *subdirectory* of
+`/workspace`, so its AGENTS.md otherwise loads only once Claude happens to read a
+file under `warp/`; and any CLAUDE.md in `/workspace` switches AGENTS.md loading
+off entirely. The user-level import avoids both.
+
+`git status` in `workspace/warp` shows `AGENTS.md` modified, ending in an
+`## Other Repositories` section: an older start script appended that on every
+boot. The current image reverts it on first boot when it is the only change to the
+file. If you had also edited AGENTS.md, delete that trailing section by hand.
+
 ### `Permission denied` writing to `/home/claude` (hooks fail, `/workspace` is fine)
 
 ```

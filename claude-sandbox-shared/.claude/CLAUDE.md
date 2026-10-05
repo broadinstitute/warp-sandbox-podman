@@ -1,3 +1,21 @@
+# Project instructions
+
+The primary agent instructions for this sandbox are `warp/AGENTS.md`, which
+points to the AGENTS.md files of the other repositories. It is imported here so
+it loads at the top of every session. The other repositories' AGENTS.md files
+load automatically when you work in those repositories.
+
+@/workspace/warp/AGENTS.md
+@/projects/warp/AGENTS.md
+
+Only one of those two paths exists in a given sandbox: `/workspace/warp` on the
+shared VM, `/projects/warp` when warp is a read-write project mount. The missing
+one is skipped.
+
+Never create, copy or edit a `CLAUDE.md` file in `/workspace` or in any
+repository, and do not run `/init`. Agent guidance lives only in each
+repository's own `AGENTS.md`; propose changes there instead.
+
 # Autonomous operation mode
 
 This sandbox is a disposable Docker container designed for long unattended
