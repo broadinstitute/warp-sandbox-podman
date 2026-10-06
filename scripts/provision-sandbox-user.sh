@@ -47,41 +47,61 @@ fatal() { echo "  ${RED}FAIL${RST}    $*"; FAIL=1; }
 # "a repo file failed to propagate" (visible, harmless), never "the user's token
 # got clobbered" (silent, unrecoverable).
 refresh_shared_claude() {
-    local src="$1" dst="$2" p mp name
+    local src="$1" dst="$2" p mp name ip reset=0 names=()
 
     # Plain files and whole directories the repo is the source of truth for.
-    # rm-then-cp (not cp -f) so a file DELETED upstream — a hook or skill dropped
-    # in a bump — also disappears from the user's copy instead of lingering.
-    for p in CLAUDE.md PLUGIN_PINS.md settings.json .caveman-active hooks skills; do
+    # Each is replaced only when it differs, so a re-run with nothing new is a
+    # true no-op. rm-then-cp (not cp -f) so a file DELETED upstream — a hook or
+    # skill dropped in a bump — also disappears from the user's copy.
+    for p in CLAUDE.md PLUGIN_PINS.md settings.json hooks skills; do
         [[ -e "${src}/${p}" ]] || continue
+        diff -rq "${src}/${p}" "${dst}/${p}" >/dev/null 2>&1 && continue
         rm -rf "${dst:?}/${p}"
         cp -a "${src}/${p}" "${dst}/${p}"
     done
+    # .caveman-active is caveman's on/off switch, which the plugin itself writes.
+    # Seed it once; refreshing it would undo a user turning caveman off.
+    [[ -e "${dst}/.caveman-active" || ! -e "${src}/.caveman-active" ]] \
+        || cp -a "${src}/.caveman-active" "${dst}/.caveman-active"
 
-    # Vendored plugin marketplaces: refresh ONLY the ones the repo actually
-    # vendors (caveman, ponytail), by name. Never rm the whole marketplaces/ dir —
-    # it also holds claude-plugins-official, which claude-code manages itself and
-    # the checkout does not carry, so a blanket wipe would delete it.
+    # Vendored plugin marketplaces: refresh ONLY the ones the repo vendors
+    # (caveman, ponytail), by name, and only when the tree changed — a plugin
+    # bump. Never rm the whole marketplaces/ dir: it also holds
+    # claude-plugins-official, which claude-code manages itself.
     for mp in "${src}/plugins/marketplaces"/*/; do
         [[ -d "$mp" ]] || continue
         name="$(basename "$mp")"
+        names+=("$name")
+        diff -rq "$mp" "${dst}/plugins/marketplaces/${name}" >/dev/null 2>&1 && continue
         rm -rf "${dst}/plugins/marketplaces/${name}"
+        mkdir -p "${dst}/plugins/marketplaces"
         cp -a "$mp" "${dst}/plugins/marketplaces/${name}"
-        # Drop this plugin's rebuilt cache/data so claude-code re-resolves it from
-        # the freshly-copied tree at the new pinned ref on the next launch.
-        rm -rf "${dst}/plugins/cache/${name}" \
-               "${dst}/plugins/data/${name}-${name}"
+        reset=1
     done
 
-    # The two ledgers claude-code regenerates from the marketplaces trees +
-    # settings on launch — both gitignored, both rebuilt on a first launch anyway.
-    # Wiping them forces a clean re-resolve so a stale `ref` recorded here cannot
-    # trigger a re-fetch that overwrites the bumped vendored tree.
-    rm -f "${dst}/plugins/known_marketplaces.json" \
-          "${dst}/plugins/installed_plugins.json"
+    # Self-heal: an install record whose directory is gone. Claude Code does not
+    # reinstall in that state; every hook fails with "Plugin directory does not
+    # exist ... run /plugin to reinstall". An earlier version of this function
+    # caused it by wiping the plugin cache on every run, under live sessions.
+    while IFS= read -r ip; do
+        [[ -d "${dst}${ip#/home/claude/.claude}" ]] || reset=1
+    done < <(grep -o '"installPath": *"[^"]*"' "${dst}/plugins/installed_plugins.json" 2>/dev/null \
+             | sed 's/.*"\([^"]*\)"$/\1/')
+
+    # Reset = the state a brand-new user starts in (vendored trees, no cache, no
+    # ledgers), which claude-code turns into installed plugins on launch. The
+    # ledgers go too, so a stale `ref` recorded in them cannot trigger a
+    # re-fetch that overwrites the vendored tree.
+    if (( reset )); then
+        for name in "${names[@]}"; do
+            rm -rf "${dst}/plugins/cache/${name}" "${dst}/plugins/data/${name}-${name}"
+        done
+        rm -f "${dst}/plugins/known_marketplaces.json" "${dst}/plugins/installed_plugins.json"
+        ok "plugins reset — Claude Code reinstalls them on your next launch"
+    fi
 
     ok "refreshed repo-owned files in shared/.claude"
-    ok "  (plugins, hooks, skills, settings — OAuth token and history left intact)"
+    ok "  (only what changed — OAuth token and history left intact)"
 }
 
 if [[ "$(id -u)" == "0" ]]; then

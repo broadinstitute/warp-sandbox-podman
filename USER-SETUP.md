@@ -297,12 +297,12 @@ too.)
    ./scripts/provision-sandbox-user.sh
    ```
    Run this from the host shell while you are **not** in a live sandbox session
-   (including a detached `tmux` one). It wipes the rebuildable plugin cache so
-   Claude Code re-resolves plugins at the new pins on your next launch, and a
-   container running against that directory at the same moment can see a
-   half-updated tree. Exit the sandbox first, re-provision, then relaunch — the
-   new plugins are live on that next launch, with your session resumable via
-   `--continue`.
+   (including a detached `tmux` one). When a plugin changed, it resets the
+   plugin cache so Claude Code reinstalls the plugins on your next launch; a
+   session still running at that moment loses its plugins and fails every
+   prompt with `Plugin directory does not exist`. Exit the sandbox first,
+   re-provision, then relaunch, resuming with `--continue`. If you already hit
+   that error, the same three steps repair it.
 
 3. **Rebuild the host fiss-mcp venv:**
    ```bash
