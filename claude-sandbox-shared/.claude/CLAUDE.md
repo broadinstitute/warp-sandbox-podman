@@ -12,9 +12,9 @@ Only one of those two paths exists in a given sandbox: `/workspace/warp` on the
 shared VM, `/projects/warp` when warp is a read-write project mount. The missing
 one is skipped.
 
-Never create, copy or edit a `CLAUDE.md` file in `/workspace` or in any
-repository, and do not run `/init`. Agent guidance lives only in each
-repository's own `AGENTS.md`; propose changes there instead.
+Never create a `CLAUDE.md` in `/workspace` itself or in any repository that has
+an `AGENTS.md`. That AGENTS.md is the only place for agent guidance there, so
+put changes in it instead. A hook enforces this.
 
 # Autonomous operation mode
 
