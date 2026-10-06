@@ -81,12 +81,12 @@
   "permissions": {
     "defaultMode": "bypassPermissions",
     "deny": [
-      "Write(/context/**)",
-      "Edit(/context/**)",
-      "Write(/home/claude/.claude/hooks/**)",
-      "Edit(/home/claude/.claude/hooks/**)",
-      "Write(/home/claude/.claude/settings.json)",
-      "Edit(/home/claude/.claude/settings.json)",
+      "Edit(//context/**)",
+      "Edit(//home/claude/.claude/hooks/**)",
+      "Edit(//home/claude/.claude/settings.json)",
+      "Edit(//workspace/CLAUDE.md)",
+      "Edit(//workspace/**/CLAUDE.md)",
+      "Edit(//projects/**/CLAUDE.md)",
       "mcp__fiss-mcp__download_gcs_file",
       "mcp__fiss-mcp__submit_workflow",
       "mcp__fiss-mcp__abort_submission",
@@ -98,5 +98,11 @@
       "Bash(git remote add:*)"
     ]
   },
-  "customInstructions": "Please read ~/.claude/CLAUDE.md for sandbox-level authorization rules. Also, always read warp/AGENTS.md (or just AGENTS.md) as it contains the project-specific rules."
+  "pluginConfigs": {
+    "agents-md@builtin": {
+      "options": {
+        "instructionFiles": "claude-md-and-agents-md"
+      }
+    }
+  }
 }
