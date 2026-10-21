@@ -79,7 +79,7 @@
     "@strands-agents/sdk": "1.17.0",
     "@google/genai": "2.21.0",
     "@mastra/core": "1.65.0",
-    "@modelcontextprotocol/sdk": "1.30.0"
+    "@modelcontextprotocol/sdk": "1.32.0"
   },
   "publishConfig": {
     "access": "public"
