@@ -22,6 +22,11 @@
 # admin should run if one is missing, rather than failing obscurely.
 set -euo pipefail
 
+# --no-next-steps: leave out the closing "what is left" text. scripts/sandbox-setup.sh
+# (`sandbox setup`) runs this as its step 2 and does the rest itself.
+NEXT_STEPS=1
+[[ "${1:-}" == "--no-next-steps" ]] && NEXT_STEPS=0
+
 SCRIPT_DIR="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
@@ -222,10 +227,15 @@ for d in "${USER_ROOT}/workspace" "${USER_ROOT}/state" "${USER_ROOT}/shared" \
 done
 chmod 700 "$USER_ROOT"
 ok "chmod 700 ${USER_ROOT}"
-warn "700 stops other users reading this directly, but NOT via sudo. On a GCP"
-warn "VM every metadata-SSH-key user is in google-sudoers, so anyone who can log"
-warn "in can read your Claude token and gcloud credentials. Treat co-users as"
-warn "trusted, or restrict who has a key."
+if [[ "$(cat /sys/class/dmi/id/sys_vendor 2>/dev/null || true)" == "Google" ]]; then
+    warn "700 stops other users reading this directly, but NOT via sudo. On a GCP"
+    warn "VM every metadata-SSH-key user is in google-sudoers, so anyone who can log"
+    warn "in can read your Claude token and gcloud credentials. Treat co-users as"
+    warn "trusted, or restrict who has a key."
+else
+    warn "700 stops other users reading this directly. Anyone with sudo on this host"
+    warn "(the admin) can still read it, including your agents' sign-in tokens."
+fi
 
 # Seed the shared-state dir from the repo so this user gets working hooks,
 # settings and the vendored plugins. Copied, not symlinked: the container mounts
@@ -560,15 +570,22 @@ else
 fi
 
 # ------------------------------------------------------------- what's left --
+if [[ "$NEXT_STEPS" == "0" ]]; then
+    exit 0
+fi
 echo
-echo "${GRN}Step 1 done.${RST}  This script is step 1 of \"Per-user setup\" in USER-SETUP.md."
+echo "${GRN}Provisioning done.${RST}"
 echo
-echo "Nothing was authenticated. Steps 2-5 are yours, and USER-SETUP.md has the"
-echo "details and the reasons — this script does not repeat them, so the two"
-echo "cannot drift apart."
+echo "The quickest way through the rest is the guided setup, which re-runs this"
+echo "script and then walks you through each login, skipping what is done:"
+echo
+echo "    sandbox setup"
+echo
+echo "The manual equivalent is \"Per-user setup, step by step\" in USER-SETUP.md."
+echo
 cat <<EOF
 
-Your paths, which USER-SETUP.md cannot know:
+Nothing was authenticated here. Your paths:
 
   env file    ${ENV_FILE}
   workspace   ${USER_ROOT}/workspace     (mounted inside as /workspace, rw)
@@ -576,22 +593,13 @@ Your paths, which USER-SETUP.md cannot know:
   state       ${USER_ROOT}/state
   repo        ${REPO_ROOT}
 
-What is left, per USER-SETUP.md:
+What is left, if you would rather do it by hand (USER-SETUP.md explains each):
 
-  Step 2  Google Cloud     gcloud auth login + application-default login
-                           (both --no-launch-browser; answer Y to the
-                           "not necessary" prompt on a GCE VM)
-  Step 3  GitHub           gh auth login --web, THEN gh auth setup-git
-  Step 4  fiss-mcp venv    cd ${REPO_ROOT} && source ${ENV_FILE} && ./setup_host.sh
-  Step 5  Launch           ./run_claude_docker.sh
-                           first run asks you to pick a login method: choose the
-                           first one, then open the URL it prints and paste the code
+  GitHub      gh auth login --web, THEN gh auth setup-git
+  Google      gcloud auth login --update-adc --no-launch-browser
+  fiss-mcp    cd ${REPO_ROOT} && source ${ENV_FILE} && ./setup_host.sh
+  Launch      sandbox claude   (or: sandbox agy) — each signs in on first run
 
-Your workspace is already populated, so step 5 opens onto real code. Add more
-repos any time with:
-
-  cd ${USER_ROOT}/workspace && git clone <url>
-
-Read USER-SETUP.md before running steps 2 and 3. Both have non-obvious failure
-modes that cost real time if you skip the explanation.
+Private seed repos are cloned only once GitHub is set up: re-run this script
+(or sandbox setup) afterwards and it clones what is missing.
 EOF

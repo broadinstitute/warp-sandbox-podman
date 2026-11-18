@@ -1,0 +1,218 @@
+#!/usr/bin/env bash
+# sandbox — the one command a user of a shared sandbox host needs.
+#
+#   sandbox setup              first-time setup; re-run it any time, it skips
+#                              whatever is already done
+#   sandbox claude [args]      Claude Code in the sandbox (also plain `sandbox`)
+#   sandbox agy [args]         Antigravity CLI (Google's agent) in the sandbox
+#   sandbox shell              bash inside the sandbox image
+#   sandbox status             what is set up, what is running, image versions
+#   sandbox attach [agent]     reattach to a running claude/agy session
+#   sandbox sessions [--pick]  past Claude sessions, newest first (resume one)
+#   sandbox update             pick up a newer checkout: settings, plugins, repos
+#
+# Agent arguments pass straight through, e.g. `sandbox claude --continue`,
+# `sandbox agy -c`.
+#
+# claude and agy run inside tmux, one session per agent. An SSH drop no longer
+# kills the agent: log back in and run the same command to reattach. Inside it,
+# Ctrl-b d detaches and leaves the agent working. SANDBOX_NO_TMUX=1 turns this off.
+#
+# Installed on the host as /usr/local/bin/sandbox, a symlink into the shared
+# checkout (scripts/setup-debian-host.sh), so it updates with `git pull`.
+set -euo pipefail
+
+SELF="$(readlink -f "${BASH_SOURCE[0]}")"
+REPO_ROOT="$(cd "$(dirname "$SELF")/.." && pwd)"
+SANDBOX_ROOT="${CLAUDE_SANDBOX_ROOT:-/mnt/sandbox}"
+USER_ROOT="${SANDBOX_ROOT}/users/${USER}"
+ENV_FILE="${SANDBOX_ENV_FILE:-${USER_ROOT}/env.${USER}.sh}"
+
+RED=$'\033[1;31m'; YEL=$'\033[1;33m'; GRN=$'\033[1;32m'; DIM=$'\033[2m'; RST=$'\033[0m'
+
+usage() { sed -n '2,23p' "$SELF" | sed 's/^# \{0,1\}//'; }
+
+load_env() {
+    if [[ ! -f "$ENV_FILE" ]]; then
+        echo "sandbox: you are not set up yet (no ${ENV_FILE})." >&2
+        echo "         Run:  sandbox setup" >&2
+        exit 1
+    fi
+    # shellcheck source=/dev/null
+    source "$ENV_FILE"
+}
+
+# tmux session name for an agent: just the agent, unless this user runs more
+# than one instance, in which case the instance is part of it.
+session_name() {
+    local agent="$1" instance="${CLAUDE_SANDBOX_INSTANCE:-$USER}"
+    if [[ "$instance" == "$USER" ]]; then echo "$agent"; else echo "${agent}-${instance}"; fi
+}
+
+# Run an agent in the foreground. This is what tmux runs, so it re-reads the env
+# file itself: a tmux server started earlier would otherwise hand the session a
+# stale environment.
+run_agent() {
+    local agent="$1"; shift
+    load_env
+    cd "$REPO_ROOT"
+    local rc=0
+    SANDBOX_AGENT="$agent" ./run_claude_docker.sh "$@" || rc=$?
+    if (( rc != 0 )) && [[ "${SANDBOX_IN_TMUX:-0}" == "1" ]]; then
+        # Without this the tmux window closes with the error in it, and the user
+        # sees nothing at all.
+        echo
+        echo "${RED}sandbox: ${agent} exited with status ${rc}.${RST} Press Enter to close this window."
+        read -r _ || true
+    fi
+    return "$rc"
+}
+
+# Start an agent inside a tmux session, or reattach to it if it is already up.
+start_agent() {
+    local agent="$1"; shift
+    load_env
+    local session
+    session="$(session_name "$agent")"
+
+    if [[ -n "${TMUX:-}" || "${SANDBOX_NO_TMUX:-0}" == "1" || ! -t 0 || ! -t 1 ]] \
+       || ! command -v tmux >/dev/null 2>&1; then
+        run_agent "$agent" "$@"
+        return
+    fi
+    if tmux has-session -t "=${session}" 2>/dev/null; then
+        echo "sandbox: ${agent} is already running in tmux session '${session}' — reattaching."
+        (( $# )) && echo "         ${YEL}(the arguments you gave are ignored; exit that session to start a new one)${RST}"
+        echo "         ${DIM}Ctrl-b d detaches again and leaves it running.${RST}"
+        sleep 1
+        exec tmux attach-session -t "=${session}"
+    fi
+    exec tmux new-session -s "$session" -e SANDBOX_IN_TMUX=1 "$SELF" __run "$agent" "$@"
+}
+
+attach() {
+    command -v tmux >/dev/null 2>&1 || { echo "sandbox: tmux is not installed." >&2; exit 1; }
+    load_env
+    local want="${1:-}" session
+    if [[ -n "$want" ]]; then
+        session="$(session_name "$want")"
+    else
+        # The only running session, if there is exactly one.
+        mapfile -t sessions < <(tmux list-sessions -F '#S' 2>/dev/null || true)
+        if (( ${#sessions[@]} == 1 )); then
+            session="${sessions[0]}"
+        elif (( ${#sessions[@]} == 0 )); then
+            echo "sandbox: nothing is running. Start one with: sandbox claude  (or: sandbox agy)"
+            exit 1
+        else
+            echo "sandbox: several sessions are running; name one: sandbox attach <$(IFS='|'; echo "${sessions[*]}")>"
+            exit 1
+        fi
+    fi
+    exec tmux attach-session -t "=${session}"
+}
+
+status() {
+    local line v
+    printf '%s\n' "${GRN}sandbox status for ${USER}${RST}  (host $(hostname))"
+    echo
+    if [[ -f "$ENV_FILE" ]]; then
+        echo "  setup       done   ${DIM}${ENV_FILE}${RST}"
+        load_env
+    else
+        echo "  setup       ${YEL}not yet${RST} — run: sandbox setup"
+    fi
+
+    # Host-side logins. Report, never mutate.
+    if command -v gh >/dev/null 2>&1 && gh auth status --hostname github.com >/dev/null 2>&1; then
+        v=$(gh api user --jq .login 2>/dev/null || echo '?')
+        if git config --global --get-all credential.helper 2>/dev/null | grep -q 'gh auth git-credential'; then
+            echo "  GitHub      ${v} (git push works from the host)"
+        else
+            echo "  GitHub      ${v}, ${YEL}but git is not wired to it${RST} — run: gh auth setup-git"
+        fi
+    else
+        echo "  GitHub      ${YEL}not logged in${RST} — sandbox setup (step 1)"
+    fi
+    if command -v gcloud >/dev/null 2>&1; then
+        v=$(gcloud auth list --filter=status:ACTIVE --format='value(account)' 2>/dev/null || true)
+        local adc="${CLOUDSDK_CONFIG:-$HOME/.config/gcloud}/application_default_credentials.json"
+        if [[ -n "$v" && -f "$adc" ]]; then
+            echo "  Google      ${v} (+ application-default credentials, for fiss-mcp)"
+        elif [[ -n "$v" ]]; then
+            echo "  Google      ${v}, ${YEL}no application-default credentials${RST} — sandbox setup"
+        else
+            echo "  Google      ${YEL}not logged in${RST} (only Terra/fiss-mcp needs it) — sandbox setup"
+        fi
+    fi
+    if [[ -n "${CLAUDE_SANDBOX_FISS_ROOT:-}" ]]; then
+        if [[ -x "${CLAUDE_SANDBOX_FISS_ROOT}/venv/bin/python" ]]; then
+            echo "  fiss-mcp    venv ready"
+        else
+            echo "  fiss-mcp    ${YEL}no venv${RST} — sandbox setup"
+        fi
+    fi
+
+    # Agent sign-ins live in the state the containers mount.
+    local state="${CLAUDE_SANDBOX_SHARED:-${USER_ROOT}/shared}"
+    if [[ -s "${state}/.claude/.credentials.json" ]]; then
+        echo "  Claude      signed in"
+    else
+        echo "  Claude      not signed in yet — the first 'sandbox claude' asks"
+    fi
+    if [[ -n "${GEMINI_API_KEY:-}" ]]; then
+        echo "  Antigravity using GEMINI_API_KEY from your env file"
+    elif [[ -n "$(find "${state}/.gemini" "${state}/.config/antigravity" -maxdepth 3 \
+                     -name '*oauth-token*' -size +0 2>/dev/null | head -1)" ]]; then
+        # File-based token storage (no keyring in the container). The name is
+        # agy's own and not documented; *oauth-token* matches what it writes.
+        echo "  Antigravity signed in"
+    else
+        echo "  Antigravity not signed in yet — the first 'sandbox agy' asks"
+    fi
+
+    echo
+    line=$(podman image inspect localhost/claude-sandbox:latest \
+             --format '{{range .Config.Env}}{{println .}}{{end}}' 2>/dev/null \
+           | awk -F= '$1=="CLAUDE_CODE_VERSION"{c=$2} $1=="AGY_VERSION"{a=$2} $1=="CODEGRAPH_VERSION"{g=$2}
+                      END{if (c) printf "claude %s, agy %s, codegraph %s", c, a, g}' || true)
+    if [[ -n "$line" ]]; then
+        echo "  image       ${line}"
+    else
+        echo "  image       ${YEL}not visible${RST} — sandbox setup writes the storage config that shows it"
+    fi
+    echo
+    echo "  running:"
+    podman ps --filter 'name=^claude-sandbox-' --format '    {{.Names}}  ({{.Status}})' 2>/dev/null \
+        | grep . || echo "    ${DIM}no sandbox containers${RST}"
+    if command -v tmux >/dev/null 2>&1 && tmux list-sessions >/dev/null 2>&1; then
+        tmux list-sessions -F '    tmux: #S  (#{?session_attached,attached,detached})'
+    fi
+}
+
+update() {
+    if podman ps -q --filter 'name=^claude-sandbox-' 2>/dev/null | grep -q .; then
+        echo "${YEL}sandbox: a sandbox is running.${RST} Exit it first (or 'sandbox attach' and quit it):"
+        echo "         refreshing plugins under a live Claude session breaks it."
+        [[ "${1:-}" == "--force" ]] || exit 1
+    fi
+    "${REPO_ROOT}/scripts/provision-sandbox-user.sh" --no-next-steps
+    load_env
+    cd "$REPO_ROOT"
+    ./setup_host.sh
+}
+
+cmd="${1:-claude}"
+(( $# )) && shift
+case "$cmd" in
+    claude|agy)        start_agent "$cmd" "$@" ;;
+    shell)             load_env; cd "$REPO_ROOT"; SANDBOX_AGENT=shell exec ./run_claude_docker.sh ;;
+    __run)             run_agent "$@" ;;
+    setup)             exec "${REPO_ROOT}/scripts/sandbox-setup.sh" "$@" ;;
+    status)            status ;;
+    attach)            attach "$@" ;;
+    sessions)          load_env; exec "${REPO_ROOT}/scripts/list-sessions.sh" "$@" ;;
+    update)            update "$@" ;;
+    help|-h|--help)    usage ;;
+    *)                 echo "sandbox: unknown command '${cmd}'." >&2; echo >&2; usage >&2; exit 2 ;;
+esac

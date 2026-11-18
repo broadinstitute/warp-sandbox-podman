@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# env.gcp.example.sh — template for one user on a shared GCP VM.
+# env.gcp.example.sh — template for one user on a shared sandbox server (AWS or
+# GCP; the name predates the AWS host).
 #
 # scripts/provision-sandbox-user.sh renders this into env.<USER>.sh with the
 # __USER__ / __USER_ROOT__ placeholders filled in. You normally do not copy it
@@ -25,9 +26,9 @@ export CLAUDE_SANDBOX_ENGINE=podman
 # that and warns if not.
 #
 # Sizing on a shared host: this is the limit that decides how many people can
-# run at once, not disk. An e2-highmem-8 has 64 GB, so 16g allows about three
-# concurrent sandboxes before the host is oversubscribed. Drop to 8g if more
-# people need to work simultaneously.
+# run at once, not disk. The host has 64 GB (r6a.2xlarge on AWS, e2-highmem-8 on
+# GCP), so 16g allows about three concurrent sandboxes before it is
+# oversubscribed on paper. Drop to 8g if more people need to work at once.
 export CLAUDE_SANDBOX_MEMORY=16g
 
 # Leave CPU unrestricted by default; the scheduler shares 8 vCPU fairly enough.
@@ -127,3 +128,13 @@ export HEADROOM=1
 # Email notifications are not configured on the VM (no MTA). The notify hooks
 # no-op while this is unset.
 #export CLAUDE_NOTIFY_EMAIL=
+
+# ------------------------------------------------------------ Antigravity ----
+
+# `sandbox agy` runs Google's Antigravity CLI in the same sandbox. By default it
+# signs in with a Google account on its first run. A Gemini API key instead
+# (https://aistudio.google.com/apikey) keeps any Google account sign-in out of the
+# container; USER-SETUP.md, "Antigravity sign-in", explains why that can matter.
+# Forwarded by name, and only into agy containers. This file is in your chmod 700
+# directory, which is what keeps the key from other users.
+#export GEMINI_API_KEY=
