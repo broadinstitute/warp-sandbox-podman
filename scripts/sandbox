@@ -132,7 +132,10 @@ status() {
     # Host-side logins. Report, never mutate.
     if command -v gh >/dev/null 2>&1 && gh auth status --hostname github.com >/dev/null 2>&1; then
         v=$(gh api user --jq .login 2>/dev/null || echo '?')
-        if git config --global --get-all credential.helper 2>/dev/null | grep -q 'gh auth git-credential'; then
+        # --get-urlmatch: gh auth setup-git writes credential.https://github.com.helper,
+        # which a plain credential.helper lookup does not see.
+        if git config --global --get-urlmatch credential.helper https://github.com 2>/dev/null \
+             | grep -q 'gh auth git-credential'; then
             echo "  GitHub      ${v} (git push works from the host)"
         else
             echo "  GitHub      ${v}, ${YEL}but git is not wired to it${RST} — run: gh auth setup-git"

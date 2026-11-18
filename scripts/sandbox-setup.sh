@@ -84,8 +84,11 @@ else
     fi
     if gh_logged_in; then
         ok "logged in to GitHub as $(gh api user --jq .login 2>/dev/null || echo '?')"
-        # Login alone does not make `git push` use the token; setup-git does.
-        if ! git config --global --get-all credential.helper 2>/dev/null | grep -q 'gh auth git-credential'; then
+        # Login alone does not make `git push` use the token; setup-git does. It
+        # writes credential.https://github.com.helper, so ask git what applies to
+        # github.com rather than reading the plain credential.helper key.
+        if ! git config --global --get-urlmatch credential.helper https://github.com 2>/dev/null \
+               | grep -q 'gh auth git-credential'; then
             if (( CHECK )); then
                 todo "git is not wired to gh: gh auth setup-git"
             else
