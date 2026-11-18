@@ -291,7 +291,9 @@ else
         if env GIT_TERMINAL_PROMPT=0 git clone --quiet "$url" "$dest"; then
             ok "cloned workspace/${name} ($(du -sh "$dest" | cut -f1), branch $(git -C "$dest" rev-parse --abbrev-ref HEAD))"
         else
-            warn "could not clone ${url} — clone it by hand into ${USER_ROOT}/workspace"
+            warn "could not clone ${url}"
+            warn "  private repos clone once you are logged in to GitHub: run sandbox setup"
+            warn "  (or gh auth login + gh auth setup-git, then re-run this script)"
         fi
     done
 fi

@@ -52,8 +52,29 @@ done
 if id "$user" >/dev/null 2>&1; then
     ok "account ${user} exists"
 else
-    useradd --create-home --shell /bin/bash --user-group "$user"
-    ok "created account ${user} (no password, no sudo)"
+    # On a REBUILT VM the data disk already holds this user's files, owned by the
+    # uid they had before. useradd would hand out the next free uid instead, and
+    # every file they own would then belong to someone else, or to no one. So
+    # when their directory exists, re-create the account with its owner's uid.
+    existing="/mnt/sandbox/users/${user}"
+    note_uid=""
+    if [[ -d "$existing" ]]; then
+        old_uid=$(stat -c %u "$existing")
+        old_gid=$(stat -c %g "$existing")
+        if getent passwd "$old_uid" >/dev/null; then
+            die "${existing} is owned by uid ${old_uid}, which already belongs to $(getent passwd "$old_uid" | cut -d: -f1)."
+        fi
+        if ! getent group "$old_gid" >/dev/null; then
+            groupadd --gid "$old_gid" "$user"
+        elif [[ "$(getent group "$old_gid" | cut -d: -f1)" != "$user" ]]; then
+            die "${existing} has gid ${old_gid}, which already belongs to group $(getent group "$old_gid" | cut -d: -f1)."
+        fi
+        useradd --create-home --shell /bin/bash --uid "$old_uid" --gid "$old_gid" "$user"
+        note_uid=" with uid ${old_uid}, the owner of ${existing}"
+    else
+        useradd --create-home --shell /bin/bash --user-group "$user"
+    fi
+    ok "created account ${user}${note_uid} (no password, no sudo)"
 fi
 if id -nG "$user" | tr ' ' '\n' | grep -qxE 'sudo|wheel|google-sudoers|admin'; then
     echo "  note    ${user} is in a sudo-capable group: $(id -nG "$user")" >&2

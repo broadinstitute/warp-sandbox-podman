@@ -393,6 +393,8 @@ if [[ "$IS_PODMAN" == "1" ]]; then
         "$ENGINE" ps --filter "name=^${CONTAINER_NAME}$" \
             --format '  {{.ID}}  {{.Names}}  ({{.Status}})' >&2
         echo "Pick a different CLAUDE_SANDBOX_INSTANCE to launch a parallel sandbox." >&2
+        echo "If no session of yours is using it (sandbox status, tmux ls), stop it with:" >&2
+        echo "    $ENGINE stop ${CONTAINER_NAME}" >&2
         exit 1
     fi
 else
@@ -659,7 +661,14 @@ cleanup_host_vertex() {
     wait "${HOST_VERTEX_PID}" 2>/dev/null || true
   fi
 }
-cleanup_host_services() { cleanup_host_fiss; cleanup_host_vertex; }
+cleanup_host_services() {
+  cleanup_host_fiss
+  cleanup_host_vertex
+  # A normal exit: the container is already gone, so stand the watchdog down
+  # (see "Cleanup watchdog" below) before it goes looking for it.
+  if [[ -n "${WATCHDOG_PID:-}" ]]; then kill "${WATCHDOG_PID}" 2>/dev/null || true; fi
+  rm -f "${CIDFILE:-}"
+}
 trap cleanup_host_services EXIT INT TERM
 
 if [[ "$FISS_MCP_ENABLED" == "1" ]]; then
@@ -1091,8 +1100,39 @@ fi
 # host.docker.internal is still declared so anything in the container that
 # hardcodes the name resolves rather than erroring; host services are reached
 # through the pasta loopback forward instead (see resolve_host_bind_ip).
+# Cleanup watchdog. The EXIT trap stops the host services when this script ends
+# normally, but bash runs no trap when a signal it does not handle kills it, and
+# SIGHUP is how sessions usually end: an SSH drop, a closed laptop, a killed tmux
+# session. Measured after `tmux kill-session`: this script was gone, its fiss-mcp
+# server orphaned to PID 1, and the container still running with no terminal,
+# so the next launch failed with "already running". Trapping HUP here does not
+# help: bash defers a trap until the foreground `podman run` returns, and that
+# client survives SIGHUP.
+#
+# So a background process outlives the launcher. It ignores HUP and INT, polls for
+# the launcher, and when it is gone stops what it left behind: the container, by
+# the ID podman wrote to --cidfile (never by name, which a quick relaunch may have
+# reused already), then the host services. On a normal exit the EXIT trap kills
+# the watchdog first, so it acts only when that trap never ran.
+CIDFILE="${XDG_RUNTIME_DIR:-${SANDBOX_HOME}}/${CONTAINER_NAME}.cid"
+rm -f "$CIDFILE"
+LAUNCHER_PID=$$
+(
+  trap '' HUP INT
+  while kill -0 "$LAUNCHER_PID" 2>/dev/null; do sleep 2; done
+  if [[ -s "$CIDFILE" ]]; then
+    "$ENGINE" stop -t 10 "$(cat "$CIDFILE")" >/dev/null 2>&1 || true
+    rm -f "$CIDFILE"
+  fi
+  for p in "${HOST_FISS_PID}" "${HOST_VERTEX_PID}"; do
+    if [[ -n "$p" ]]; then kill "$p" 2>/dev/null || true; fi
+  done
+) &
+WATCHDOG_PID=$!
+
 "$ENGINE" run --rm -it \
   --name "${CONTAINER_NAME}" \
+  --cidfile "${CIDFILE}" \
   "${MOUNTS[@]}" \
   --add-host=host.docker.internal:host-gateway \
   ${PODMAN_NET_FLAGS[@]+"${PODMAN_NET_FLAGS[@]}"} \

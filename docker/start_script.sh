@@ -385,10 +385,13 @@ if [[ -e /workspace/CLAUDE.md ]]; then
   echo "${YEL}  from your workspace directory on the host (see FAQ.md).${RST}"
 fi
 
-# Run the agent. Not `exec`: the EXIT trap above still has to stop headroom.
+# Run the agent. claude is not exec'd: the EXIT trap above still has to stop
+# headroom. agy is, so that it becomes PID 1 and receives the container's
+# signals: bash as PID 1 ignores SIGTERM and SIGHUP, which made `podman stop`
+# wait out its timeout and left the container running when its terminal closed.
 case "$SANDBOX_AGENT" in
   claude) claude "$@" ;;
-  agy)    agy "$@" ;;
+  agy)    exec agy "$@" ;;
   shell)  bash ;;
   *)      echo "start_script: unknown SANDBOX_AGENT '${SANDBOX_AGENT}' (claude, agy or shell)" >&2
           exit 2 ;;

@@ -45,6 +45,17 @@ echo "=== container engine ==="
 ENGINE="${CLAUDE_SANDBOX_ENGINE:-podman}"
 if ! command -v "$ENGINE" >/dev/null 2>&1; then
   fatal "'$ENGINE' not on PATH."
+elif ! info_err="$("$ENGINE" info 2>&1 >/dev/null)"; then
+  # Every check below reads `podman info`. When that call itself fails they
+  # would each report a wrong conclusion ("NOT rootless", "pasta not found"),
+  # so report the real error once instead.
+  fatal "'$ENGINE info' fails:"
+  printf '%s\n' "$info_err" | tail -3 | sed 's/^/            /'
+  if grep -q 'imagestore' <<<"$info_err"; then
+    echo "          The shared image store is not readable. Either an admin is building"
+    echo "          the image right now (it opens up when the build finishes), or its"
+    echo "          permissions need: sudo chmod -R a+rX ${CLAUDE_SANDBOX_IMAGE_STORE:-/mnt/sandbox/imagestore}"
+  fi
 else
   ENGINE_VER="$("$ENGINE" --version 2>/dev/null | awk '{print $3}')"
   note "$ENGINE $ENGINE_VER"
