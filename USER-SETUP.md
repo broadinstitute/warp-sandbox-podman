@@ -131,9 +131,8 @@ So, in order of preference:
    their own: Google's docs list personal plans, Gemini Enterprise, or a Cloud
    project as the ways in.
 
-To switch, type `/logout` inside agy, or delete
-`/mnt/sandbox/users/$USER/shared/.gemini/antigravity-cli/`'s token file, then
-launch again.
+To switch, type `/logout` inside agy (it clears the saved sign-in), then launch
+again. Adding or removing `GEMINI_API_KEY` takes effect on the next launch.
 
 ## Per-user setup, step by step
 
