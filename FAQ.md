@@ -9,6 +9,7 @@ Grouped by where you hit them:
 - [Inside the container](#inside-the-container)
 - [Google Cloud and Terra](#google-cloud-and-terra)
 - [GitHub and pushing](#github-and-pushing)
+- [Antigravity (agy)](#antigravity-agy)
 - [The shared VM](#the-shared-vm)
 - [Resource limits](#resource-limits)
 
@@ -144,7 +145,13 @@ non-reproducible and would be lost on the next container exit anyway.
 
 ### My SSH dropped: how do I reconnect to the session?
 
-You do not reattach; you resume. The launcher runs `podman run --rm -it`, so the
+**With the `sandbox` command, you reattach:** log back in and run the same command
+(`sandbox claude` or `sandbox agy`), or `sandbox attach`. `sandbox` starts each
+agent inside its own tmux session, and with linger enabled that session, and the
+agent in it, keeps running while you are disconnected.
+
+The rest of this answer is about launching `./run_claude_docker.sh` directly,
+outside tmux. Then you do not reattach; you resume. The launcher runs `podman run --rm -it`, so the
 container is tied to your terminal **and** deleted on exit: losing SSH destroys the
 TTY, `claude` takes SIGHUP, and the container is removed. `podman ps` will show
 nothing.
@@ -191,7 +198,8 @@ are still there; a command it was running died with the container.
 
 ### Stop it happening: run inside tmux
 
-The container dies with the terminal, so put the terminal somewhere that outlives your
+`sandbox claude` / `sandbox agy` already do this. When launching by hand, the
+container dies with the terminal, so put the terminal somewhere that outlives your
 connection:
 
 ```bash
@@ -440,7 +448,60 @@ passes `-c safe.directory` internally for its staleness check.
 
 ---
 
+## Antigravity (agy)
+
+### `sandbox agy` asks me to sign in every time
+
+The token is a file in your agy state, `users/$USER/shared/.gemini/`, which the
+launcher mounts at `~/.gemini`. There is no keyring in the container, so agy falls
+back to file storage, and the agy log says so: `Using file-based token storage
+because no D-Bus session bus detected`. If you are asked again, check:
+
+```bash
+ls -la /mnt/sandbox/users/$USER/shared/.gemini/antigravity-cli/   # must be yours, writable
+sandbox status                                                    # "Antigravity signed in"?
+```
+
+If the directory is not yours (an admin copied something in), `chown` it back. If
+you signed in with "Use a Google Cloud project", the project choice is part of the
+saved sign-in; picking a different one signs you in afresh.
+
+### My Broad (Workspace) account is refused, or has no plan
+
+Google Workspace accounts have no Antigravity plan of their own. Google's docs list
+three ways in: a personal Google account (free, Pro or Ultra), Gemini Enterprise,
+or "Use a Google Cloud project". Before choosing the last with a Broad account,
+read [USER-SETUP.md, Antigravity sign-in](USER-SETUP.md#antigravity-sign-in): that
+token would give the agent your Google Cloud access. A Gemini API key avoids the
+question entirely.
+
+### agy ignores my `GEMINI_API_KEY`, or refuses to start
+
+agy uses the key only when its settings say `"modelProvider": "gemini"`, and
+refuses to start if they say so with no key. You never edit that by hand here:
+start_script.sh sets it on every launch from whether `GEMINI_API_KEY` reached the
+container. So check that the variable is exported in
+`/mnt/sandbox/users/$USER/env.$USER.sh`, and that you launched with `sandbox agy`
+(only agy containers receive it). The launch prints which provider is in effect:
+`agy: model provider = Gemini API key (GEMINI_API_KEY)`.
+
+### Is agy's version up to date? Can it update itself?
+
+Not by itself, deliberately. It is pinned in the image, and its self-updater skips
+because it cannot write `/usr/local/bin`. `sandbox status` shows the version; the
+admin moves it with `scripts/bump-versions.sh` and a rebuild
+([AWS.md](AWS.md#updating-the-image)).
+
 ## The shared VM
+
+### `configure storage: open /mnt/sandbox/imagestore/overlay-images/images.lock: permission denied`
+
+An admin is building the image right now, most likely the first build on a new
+host. The store stays root-only until the build finishes, then
+`build-shared-image.sh` opens it up (`chmod -R a+rX`). Wait for it. If no build is
+running, the store's permissions were reset by a root operation: an admin runs
+`sudo chmod -R a+rX /mnt/sandbox/imagestore`. `setup_host.sh` reports this case by
+name rather than as "podman is NOT rootless".
 
 ### "All my work is gone"
 

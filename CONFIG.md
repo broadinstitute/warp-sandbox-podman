@@ -39,6 +39,10 @@ before launching. Templates: `env.podman.example.sh` (local),
 | `CLAUDE_SANDBOX_GCP_PROJECT` | unset | Forwarded to host fiss-mcp as `GOOGLE_CLOUD_PROJECT`. Required for the GCS tools. |
 | `CLAUDE_SANDBOX_IMAGE_STORE` | `/mnt/sandbox/imagestore` | Shared read-only image store (server deployments). |
 | `CLAUDE_NOTIFY_EMAIL` | unset | Leave unset and the notify hooks no-op; no MTA is configured. |
+| `SANDBOX_AGENT` | `claude` | Which agent the container runs: `claude`, `agy` (Antigravity CLI) or `shell` (bash). `sandbox claude` / `sandbox agy` set it. Non-default agents get their own container name, so they can run alongside Claude. |
+| `GEMINI_API_KEY` | unset | agy only: sign in with a Gemini API key instead of a Google account ([why you might want to](USER-SETUP.md#antigravity-sign-in)). Forwarded by name, into agy containers only. |
+| `GOOGLE_GEMINI_BASE_URL` | unset | agy only: a Gemini-compatible endpoint. |
+| `SANDBOX_NO_TMUX` | unset | `sandbox` command only: `1` runs the agent in the foreground instead of in a tmux session. |
 
 Component toggles — `HEADROOM`, `HEADROOM_PORT`, `FISS_MCP`,
 `FISS_MCP_ALLOW_WRITES`, `FISS_MCP_PORT`, `CODEGRAPH`, and the Vertex signals —
@@ -78,6 +82,17 @@ shared-mode instances. The write-hot paths stay per-instance and bind-mount on t
 `.claude.json` and `projects/` are per-instance because they are rewritten on
 every change and hold per-project `allowedTools`/`mcpServers`/history that would
 race if shared.
+
+**Antigravity (`SANDBOX_AGENT=agy`)** mounts none of the above. Instead:
+
+| Host path | Container path | Holds |
+|---|---|---|
+| `<state>/.gemini/` | `/home/claude/.gemini` | agy settings, rules, MCP config, conversations, **sign-in token** |
+| `<state>/.config/antigravity/` | `/home/claude/.config/antigravity` | plugin secrets |
+
+`<state>` is `$SHARED_HOME` in shared mode, `$SANDBOX_HOME` otherwise. Neither
+agent's container mounts the other's state, so neither can read the other's token.
+Details in [COMPONENTS.md](COMPONENTS.md#antigravity-cli-agy-the-second-agent).
 
 In shared mode the OAuth token lands at `$SHARED_HOME/.claude/.credentials.json`
 and is reused by every shared-mode sandbox on the host — log in once. In

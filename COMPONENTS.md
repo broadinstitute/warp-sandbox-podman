@@ -2,22 +2,26 @@
 
 - [The image](#the-image)
 - [In-container root: works locally, not on a shared store](#in-container-root-works-locally-not-on-a-shared-store)
-- [fiss-mcp (Terra) — runs on the host](#fiss-mcp-terra-runs-on-the-host)
-- [CodeGraph MCP — runs in the container](#codegraph-mcp-runs-in-the-container)
+- [fiss-mcp (Terra) — runs on the host](#fiss-mcp-terra--runs-on-the-host)
+- [CodeGraph MCP — runs in the container](#codegraph-mcp--runs-in-the-container)
+- [Antigravity CLI (agy): the second agent](#antigravity-cli-agy-the-second-agent)
 - [Headroom proxy](#headroom-proxy)
 - [Vertex AI mode (inherited, unverified)](#vertex-ai-mode-inherited-unverified)
 - [Using it with agents other than Claude Code](#using-it-with-agents-other-than-claude-code)
 
 ## The image
 
-Base `docker.io/library/node:22-slim`, ~9.0 GB built. Fully qualified base image
+Base `docker.io/library/node:24-slim`, ~9.8 GB built. Fully qualified base image
 names are required: podman on RHEL-family hosts sets
 `short-name-mode="enforcing"`, so a bare `node:22-slim` makes a non-interactive
 build hang and then fail.
 
-- **Claude Code CLI** — `claude`, pinned via `CLAUDE_CODE_VERSION`. The launcher
-  sets `DISABLE_AUTOUPDATER=1`: on a shared store every user must run the same
-  version, and a self-update would be lost at container exit anyway.
+- **Claude Code CLI** — `claude`, pinned via `CLAUDE_CODE_VERSION` (the npm
+  `stable` tag at the last bump). The launcher sets `DISABLE_AUTOUPDATER=1`: on a
+  shared store every user must run the same version, and a self-update would be
+  lost at container exit anyway.
+- **Antigravity CLI** — `agy`, Google's terminal agent, pinned by URL and sha512.
+  See [its section](#antigravity-cli-agy-the-second-agent).
 - **Python** — venv at `/opt/claude-venv`, on `PATH`, preloaded with `numpy`,
   `pandas`, `matplotlib`, `scipy`, `scikit-learn`, `seaborn`, `ipython`,
   `jupyter`, `requests`, `anndata` (with `h5py`), `scanpy[leiden]`
@@ -246,6 +250,100 @@ for one workdir with `touch /workspace/.codegraph-disable`.
 Cost: ~50 MB image bundle, ~80-150 MB RSS while a session is open, ~1-10 MB
 SQLite per 100k LOC, CPU spike only on file change.
 
+## Antigravity CLI (agy): the second agent
+
+Google's terminal agent runs in the same image and the same sandbox as Claude
+Code: `sandbox agy`, or `SANDBOX_AGENT=agy ./run_claude_docker.sh`. Only the agent
+differs. `/workspace`, `/context`, the read-only and read-write mounts, the
+resource limits and the host-side fiss-mcp are the same, so everything in the
+isolation model holds unchanged. The two can run at once: the containers are named
+`claude-sandbox-<instance>` and `claude-sandbox-<instance>-agy`.
+
+### Pinned, and kept pinned
+
+`AGY_VERSION`, `AGY_URL` and `AGY_SHA512` in the Dockerfile are copied from Google's
+release manifest, the same file the official `install.sh` reads, and the build
+checks the sha512. `scripts/bump-versions.sh` rewrites all three from the current
+manifest.
+
+agy updates itself in the background, but only when it can write the directory its
+binary is in. In the image that is `/usr/local/bin`, which the container user cannot
+write, so the updater stands down. Measured:
+`auto_updater.go: Directory /usr/local/bin is not fully accessible (readable: true,
+writable: false), skipping update`. That is the job `DISABLE_AUTOUPDATER` does for
+claude. Installed under `$HOME` instead, every user would drift to whatever was
+current, and each release would drop a 270 MB binary into their persisted state.
+
+### State, and why the two agents do not share it
+
+| Host path | Container path | Holds |
+|---|---|---|
+| `<state>/.gemini/` | `/home/claude/.gemini` | settings, global rules, MCP config, conversations, the **sign-in token** |
+| `<state>/.config/antigravity/` | `/home/claude/.config/antigravity` | plugin secrets |
+
+`<state>` is `$CLAUDE_SANDBOX_SHARED` in shared mode (`users/<user>/shared/` on a
+shared host), else `$CLAUDE_SANDBOX_HOME`. These are mounted **only** into agy
+containers, and an agy container mounts none of Claude's state. Neither agent can
+read the other's token.
+
+### Sign-in
+
+There is no keyring in the container (no D-Bus session), so agy keeps its token in a
+file under `~/.gemini`. Measured: `Using file-based token storage because no D-Bus
+session bus detected`. Being a file in the mounted state is what makes it survive
+relaunches. The first run asks how to sign in and, with no browser available, prints
+a URL to open on your laptop and waits for the code.
+
+| Route | How | What the token can reach |
+|---|---|---|
+| Gemini API key | `GEMINI_API_KEY` in the env file | the Gemini API only |
+| Personal Google account | sign-in prompt | Google Cloud as that person; nothing, for an account with no cloud access |
+| Google Cloud project, e.g. a Broad account | "Use a Google Cloud project" at the prompt | **Google Cloud as that account**, including Terra buckets |
+
+The last row is the one to understand. Antigravity's Google sign-in, like Gemini
+CLI's, carries the `cloud-platform` OAuth scope, and the token sits where the agent
+can read it. Signed in with a Broad identity, the agy container therefore holds a
+Google Cloud credential: exactly what the rest of this design keeps out (no
+`gcloud`, no ADC, Terra only through fiss-mcp). Users are steered to the first two
+rows in [USER-SETUP.md](USER-SETUP.md#antigravity-sign-in).
+
+`GEMINI_API_KEY` is forwarded with `-e GEMINI_API_KEY`, by name, so its value never
+appears in the podman command line that `ps` shows other users. agy ignores the key
+unless settings say `"modelProvider": "gemini"`, and refuses to start if they say so
+without a key. start_script.sh therefore derives that setting from whether the key is
+set.
+
+**Deliberately not wired:** ADC sign-in (`AGY_ADC_AUTH`). It would need gcloud
+application-default credentials inside the container.
+
+### What start_script.sh does on every agy launch
+
+- **Settings**: seeds `~/.gemini/antigravity-cli/settings.json` from
+  `/opt/sandbox/agy/settings.json` (docker/agy/ in the repo), then merges the
+  sandbox's entries into the user's file: deny `command(git push)`,
+  `command(git remote add)` and `command(git remote set-url)`, and trust
+  `/workspace`. A user's model, allow rules and other preferences are kept; the deny
+  rules come back if deleted.
+- **Rules**: `~/.gemini/GEMINI.md` links to `/opt/sandbox/agy/GEMINI.md`, the
+  sandbox rules (the counterpart of `~/.claude/CLAUDE.md`), and
+  `~/.gemini/AGENTS.md` links to `/workspace/warp/AGENTS.md`. agy reads both as
+  global rules. A user's own regular file at either path is left alone.
+- **MCP**: `agy mcp add fiss-mcp <url>` and
+  `agy mcp add codegraph codegraph serve --mcp`, through agy's CLI rather than by
+  writing its config file, so a format change between releases cannot break them.
+  `FISS_MCP=0` / `CODEGRAPH=0` remove them.
+- **Skipped**: Headroom and the Vertex routing (Anthropic traffic only), the Claude
+  plugin pin checks, and `~/.claude.json`.
+
+### Limits
+
+- No browser in the image, so agy's browser and Chrome DevTools features are
+  unavailable.
+- agy's own terminal sandbox (`--sandbox`) is redundant here, since the container is
+  the boundary, and has not been tested inside it.
+- Remote Control (`agy --remote-control`) relays through Google's service. It is
+  not configured, and is off unless you start it.
+
 ## Headroom proxy
 
 [Headroom](https://github.com/chopratejas/headroom) is a local HTTP proxy that
@@ -311,15 +409,16 @@ fiss-mcp and Vertex are orthogonal: separate processes, port ranges and traps.
 
 ## Using it with agents other than Claude Code
 
-The isolation is **agent-agnostic**. Nothing in the security model is
+[Antigravity](#antigravity-cli-agy-the-second-agent) is the worked example: the
+pattern for any further agent is the same. The isolation is **agent-agnostic**. Nothing in the security model is
 Claude-specific — it is all engine-level and holds for any process: rootless
 podman user namespace, `--userns=keep-id`, explicit bind mounts as the only way in
 or out, cgroup v2 ceilings, and no credentials in the image.
 
-What *is* Claude-specific is the tooling on top: the pinned
-`@anthropic-ai/claude-code` install, the MCP wiring and plugin-pin checks in
-`docker/start_script.sh`, and the `.claude` state layout the launcher mounts. To
-host a different agent, add its runtime to the Dockerfile and swap the final
-`claude "$@"` in `start_script.sh` for that agent's entrypoint. The launcher, mount
-layout, resource limits and the fiss-mcp bridge need no changes — they only care
-that *something* runs in the container. Expect to add tools.
+What is agent-specific is the tooling on top: the pinned install, the MCP wiring
+and settings in `docker/start_script.sh`, and the state directories the launcher
+mounts. To add one: install it pinned in the Dockerfile (somewhere the container
+user cannot write, if it self-updates), add a `SANDBOX_AGENT` value to the launcher
+with its own state mounts and container-name suffix, add its setup and entrypoint
+to `start_script.sh`, and a subcommand to `scripts/sandbox`. The mount layout for
+`/workspace`, the resource limits and the fiss-mcp bridge need no changes.

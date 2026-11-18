@@ -4,8 +4,8 @@
 
 # warp-sandbox-podman
 
-A **rootless [podman](https://podman.io/)** sandbox for running a coding agent
-with filesystem isolation. The container sees a workspace directory you choose
+A **rootless [podman](https://podman.io/)** sandbox for running coding agents,
+**Claude Code** and Google's **Antigravity CLI** (`agy`), with filesystem isolation. The container sees a workspace directory you choose
 and its own state — the host's home directory, `/etc`, other users, and
 everything else stay invisible to the agent.
 
@@ -26,7 +26,8 @@ shared server — see [in-container root](COMPONENTS.md#in-container-root-works-
 
 ## Documentation
 
-- **[USER-SETUP.md](USER-SETUP.md)** — **Start here for shared servers:** Per-user setup, adding files/repos, installing packages
+- **[USER-SETUP.md](USER-SETUP.md)** — **Start here for shared servers:** `sandbox setup`, then `sandbox claude` / `sandbox agy`; adding files/repos, installing packages
+- **[AWS.md](AWS.md)** — Admin runbook for the AWS host: create, bootstrap, build, add users, update, rebuild
 - **[CONFIG.md](CONFIG.md)** — Every environment variable, mounts, push workflow, persistence
 - **[COMPONENTS.md](COMPONENTS.md)** — What is in the image, fiss-mcp, CodeGraph, Headroom
 - **[SERVER.md](SERVER.md)** — Admin guide: VM setup, disk, users, image store, capacity, GPU
@@ -45,8 +46,8 @@ what.
 | Who | One person on their own machine | Several people on one Linux VM |
 | Image | You build it | An admin builds one read-only copy everyone shares |
 | State | Anywhere you like | `/mnt/sandbox/users/$USER/` on a data disk |
-| Setup | [Local quick start](#a-standalone-local) — three commands | [Per-user setup](USER-SETUP.md#per-user-setup-every-user-does-this-once) — five steps, no root |
-| Admin work | none | [SERVER.md](SERVER.md), once |
+| Setup | [Local quick start](#a-standalone-local) — three commands | [`sandbox setup`](USER-SETUP.md#quick-start) — one guided command, no root |
+| Admin work | none | [AWS.md](AWS.md) (scripted) or [SERVER.md](SERVER.md) (GCP), once |
 
 Both need the same host prerequisites:
 
@@ -121,14 +122,23 @@ Everything configurable is in [CONFIG.md](CONFIG.md).
 One VM, one image, many users. Each user provisions themselves with **their own
 account only** — no root, and no admin involvement after the machine exists.
 
-An admin does [SERVER.md](SERVER.md) once: create the VM and data disk, install
-host packages, build the shared image store, and add each person's SSH key.
-Everything below is what a *user* does.
+The current host is an AWS EC2 instance, `warp-claude-sandbox-3` (`r6a.2xlarge`,
+8 vCPU / 64 GiB, us-east-2), set up by scripts: [AWS.md](AWS.md). It replaces
+the GCP VM `warp-claude-sandbox-2` that [SERVER.md](SERVER.md) describes; the same
+Debian 13 host layout runs on either. Per admin action: one command to add a user.
+Per user:
 
-Verified on Debian 13 with podman 5.4.2 and multiple users. Debian 12 cannot host
-it (podman 4.3.1); see [Choosing the OS](SERVER.md#choosing-the-os).
+```bash
+ssh <you>@<host>
+sandbox setup          # GitHub, repos, Google, Terra venv; re-run any time
+sandbox claude         # or: sandbox agy
+```
 
-For all user provisioning, uploading files, cloning repositories, and installing packages on a shared server, please see **[USER-SETUP.md](USER-SETUP.md)**.
+Verified on Debian 13 with podman 5.4.2 and multiple users, on GCP and AWS. Debian
+12 cannot host it (podman 4.3.1); see [Choosing the OS](SERVER.md#choosing-the-os).
+
+For everything a user does, including files, repos and packages, see
+**[USER-SETUP.md](USER-SETUP.md)**.
 
 ---
 
@@ -145,9 +155,14 @@ claim is verified by probe in
 
 **Deliberately not covered.**
 
-- **Humans on a shared VM can read each other's directories via `sudo`.** Every
-  metadata-SSH-key user on a GCE VM lands in `google-sudoers`. Accepted: co-users
-  are trusted people. Agents are not, and they are what the boundary is for.
+- **Humans with `sudo` can read everyone's directories.** On the AWS host that is
+  only the `admin` account; users get local accounts with no sudo. On a GCE VM
+  every metadata-SSH-key user lands in `google-sudoers`. Accepted: co-users are
+  trusted people. Agents are not, and they are what the boundary is for.
+- **An Antigravity Google sign-in is a cloud credential.** Its token carries Google
+  Cloud scope and lives in the agy container. Signed in with a Broad account, that
+  agent could act on Google Cloud as the user. Use a Gemini API key or a personal
+  account instead: [USER-SETUP.md](USER-SETUP.md#antigravity-sign-in).
   If you would rather your *own* agent sessions could not do that either, run them
   from a `useradd` account, which gets no `google-sudoers` and needs no sudo to run
   the sandbox — see
@@ -165,6 +180,14 @@ claim is verified by probe in
 
 ## What you get beyond the isolation
 
+- **Two agents, one sandbox.** [Claude Code](https://code.claude.com) and Google's
+  [Antigravity CLI](https://antigravity.google) share the image, the mounts and the
+  Terra tools. Each keeps its own state, and neither container can see the other's
+  sign-in. Both are pinned, so every user runs the same versions.
+  `scripts/bump-versions.sh` moves every pin at once:
+  [COMPONENTS.md](COMPONENTS.md#antigravity-cli-agy-the-second-agent).
+- **One command for users**: `sandbox setup | claude | agy | status | attach |
+  update`. Agents run in tmux, so an SSH drop no longer ends a run.
 - **[fiss-mcp](https://github.com/broadinstitute/fiss-mcp)** for Terra, running on
   the **host** rather than in the container — so the sandbox has no `gcloud`, no
   `gsutil` and no credentials, and the MCP tools are the only path to Terra/GCP.
@@ -194,7 +217,8 @@ Details and toggles: [COMPONENTS.md](COMPONENTS.md).
 |---|---|
 | [CONFIG.md](CONFIG.md) | Every environment variable, mount layouts, read-only/read-write mounts, the push workflow, installing packages, persistence |
 | [COMPONENTS.md](COMPONENTS.md) | What is in the image, fiss-mcp, CodeGraph, Headroom, Vertex mode |
-| [SERVER.md](SERVER.md) | Admin guide for the shared VM: disk, instance, users, image store, capacity, rebuilds |
+| [AWS.md](AWS.md) | The AWS host: scripted creation and bootstrap, users, updates, resizing, rebuilds, cost |
+| [SERVER.md](SERVER.md) | Admin guide for the shared VM: disk, instance, users, image store, capacity, rebuilds (GCP specifics) |
 | [FAQ.md](FAQ.md) | Every error we hit, with the diagnosis that turned out to be right |
 | [FORK.md](FORK.md) | What changed from upstream, and the measurements behind each decision |
 

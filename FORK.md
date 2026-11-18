@@ -228,11 +228,28 @@ Dropping sysbox means no custom runtime on the VM — plain rootless podman.
   no-credentials-in-container property holds end to end with no key files.
 - If the VM has SELinux enforcing (RHEL-family images), bind mounts will need `:z`.
 
+## Portability to AWS
+
+Done, on 2026-11-18: [AWS.md](AWS.md). The same Debian 13 host, with three
+differences that matter. There is no metadata-key account mechanism, so users get
+local accounts (`scripts/add-sandbox-user.sh`, no sudo). The instance has no IAM
+role. And an nftables rule closes the metadata service to non-root uids, because
+pasta makes it reachable from rootless containers whatever the IMDSv2 hop limit.
+
+## A second agent
+
+Google's Antigravity CLI runs in the same image (`SANDBOX_AGENT=agy`); see
+[COMPONENTS.md](COMPONENTS.md#antigravity-cli-agy-the-second-agent). Nothing in
+the isolation model changed for it. What did need care: its self-updater (defeated
+by installing it where the container user cannot write), its keyring (absent, so it
+falls back to a token file in the mounted state), and keeping each agent's sign-in
+out of the other's container.
+
 ## Not addressed
 
-- **Base image CVEs** — the IDE scanner flags 3 critical / 8 high across
-  `eclipse-temurin:17-jdk` and `node:22-slim`. Inherited from upstream's pins; bumping
-  them is a separate decision.
+- **Base image CVEs** — the IDE scanner flags high-severity findings in the base
+  images (`eclipse-temurin:17-jdk`, `node:24-slim`). Base images are re-pulled on a
+  forced rebuild; they are not otherwise patched here.
 - Vertex mode is wired for the pasta forward but untested here.
 - Nested containers (podman-in-podman) — deliberately out of scope.
 

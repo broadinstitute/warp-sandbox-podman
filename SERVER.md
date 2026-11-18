@@ -1,8 +1,16 @@
 # Running the shared server (admin guide)
 
 Everything in this document is done **once, by an admin**. Users never run any of
-it — their side is [Per-user setup](USER-SETUP.md),
-which is five steps and needs no root.
+it. Their side is [`sandbox setup`](USER-SETUP.md#quick-start), which needs no
+root.
+
+> **On AWS the procedure is scripted:** see [AWS.md](AWS.md). This document stays
+> the reference for *why* each piece exists, and for the GCP specifics. Two of its
+> scripts work on any Debian 13 host, GCP included:
+> `scripts/setup-debian-host.sh` does [Host packages](#host-packages),
+> [Format and mount the data disk](#format-and-mount-the-data-disk) and the shared
+> directories, and `scripts/add-sandbox-user.sh` does
+> [route B of Adding a user](#adding-a-user).
 
 Verified end to end on a real GCP deployment: Debian 13, podman 5.4.2, a separate
 data disk, multiple users. Every value below was checked against that deployment
@@ -183,6 +191,8 @@ stack locks everyone out.
 ## Host packages
 
 Debian's cloud image is minimal — nothing container-related ships by default.
+`sudo ./scripts/setup-debian-host.sh` installs all of this, plus `gh` and (off GCE)
+`google-cloud-cli` from their vendors' repositories, and a pinned `uv`. By hand:
 
 ```bash
 sudo apt-get update
@@ -314,7 +324,9 @@ That is the only admin action needed. They then run
 themselves.
 
 **Route B — a local account, no Google identity, no metadata change.** This is the
-**recommended way to run agents**, not just a way to test. A metadata-key account
+**recommended way to run agents**, not just a way to test, and the only route on
+AWS. `sudo ./scripts/add-sandbox-user.sh <name> <pubkey>` does all of it, keys and
+linger included. A metadata-key account
 is placed in `google-sudoers` by the guest agent, so it can read every other
 user's Claude token and credentials. An account created with `useradd` is not, and
 cannot. Running the sandbox needs no sudo at all, so the agent account should not
