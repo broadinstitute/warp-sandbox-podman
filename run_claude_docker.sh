@@ -32,11 +32,29 @@ if [[ -z "${CLAUDE_SANDBOX_INSTANCE:-}" ]]; then
     exit 1
 fi
 
+# Which agent the container runs. Same image, same mounts for /workspace and
+# /context, same host-side fiss-mcp; what differs is the agent's own state:
+#   claude  Claude Code (default). Mounts the Claude state described below.
+#   agy     Antigravity CLI. Mounts ONLY agy's state (~/.gemini,
+#           ~/.config/antigravity), never Claude's, so neither agent can read the
+#           other's sign-in token.
+#   shell   bash with the Claude mounts, for debugging the setup.
+SANDBOX_AGENT="${SANDBOX_AGENT:-claude}"
+case "$SANDBOX_AGENT" in
+    claude|agy|shell) ;;
+    *) echo "CRITICAL ERROR: SANDBOX_AGENT must be claude, agy or shell (got '${SANDBOX_AGENT}')." >&2
+       exit 1 ;;
+esac
+
 # Per-instance suffix. Each sandbox gets its own DinD volume, container name,
 # and persistent-state directory so concurrent instances don't fight over
 # /var/lib/docker.
 INSTANCE_SUFFIX="-${CLAUDE_SANDBOX_INSTANCE}"
+# Non-default agents get their own container name, so a Claude session and an
+# agy session can run side by side against the same /workspace. The
+# "already running" guard below is per name, i.e. per agent.
 CONTAINER_NAME="claude-sandbox-${CLAUDE_SANDBOX_INSTANCE}"
+[[ "$SANDBOX_AGENT" == "claude" ]] || CONTAINER_NAME+="-${SANDBOX_AGENT}"
 
 # Two layout modes, picked by CLAUDE_SANDBOX_USE_SHARED:
 #
@@ -391,7 +409,19 @@ fi
 # Build the mount args based on layout. Later mounts shadow earlier ones, so
 # in shared mode the per-instance hot dirs override the shared parent.
 MOUNTS=( -v "${CLAUDE_SANDBOX_PROJECTS_DIR}:/workspace" )
-if [[ "$USE_SHARED" == "1" ]]; then
+if [[ "$SANDBOX_AGENT" == "agy" ]]; then
+    # agy's state lives beside .claude in the same state directory (the per-user
+    # shared dir in shared mode), so it is per user, survives relaunches and VM
+    # rebuilds, and is backed up with everything else. Created here because a
+    # bind-mount source must exist before `run`.
+    AGY_STATE_BASE="$([[ "$USE_SHARED" == "1" ]] && echo "$SHARED_HOME" || echo "$SANDBOX_HOME")"
+    mkdir -p "${AGY_STATE_BASE}/.gemini" "${AGY_STATE_BASE}/.config/antigravity"
+    MOUNTS+=(
+      -v "${AGY_STATE_BASE}/.gemini:/home/claude/.gemini"
+      -v "${AGY_STATE_BASE}/.config/antigravity:/home/claude/.config/antigravity"
+    )
+    echo "agent: agy  (state ${AGY_STATE_BASE}/.gemini)"
+elif [[ "$USE_SHARED" == "1" ]]; then
     MOUNTS+=(
       -v "${SHARED_HOME}/.claude:/home/claude/.claude"
       -v "${SANDBOX_HOME}/.claude.json:/home/claude/.claude.json"
@@ -1003,7 +1033,19 @@ else
   fi
 fi
 
-# Make it so. Any args ($@) are passed to `claude` inside the container —
+# Agent-specific environment, forwarded BY NAME (`-e VAR` with no value), so a
+# key's value never appears on the podman command line, where `ps` would show it
+# to every user on the host.
+#   GEMINI_API_KEY          agy with a Gemini API key instead of Google sign-in
+#   GOOGLE_GEMINI_BASE_URL  agy against a Gemini-compatible endpoint
+# Only an agy container gets them.
+AGENT_ENV=()
+if [[ "$SANDBOX_AGENT" == "agy" ]]; then
+  [[ -n "${GEMINI_API_KEY:-}" ]] && AGENT_ENV+=(-e GEMINI_API_KEY)
+  [[ -n "${GOOGLE_GEMINI_BASE_URL:-}" ]] && AGENT_ENV+=(-e GOOGLE_GEMINI_BASE_URL)
+fi
+
+# Make it so. Any args ($@) are passed to the agent inside the container —
 # e.g. --resume <id>, --continue, --dangerously-skip-permissions.
 # To drop into a shell instead, swap `claude "$@"` below for `/bin/bash`.
 # Note: not using `exec` so the EXIT trap can still fire to clean up the
@@ -1076,6 +1118,8 @@ fi
   -e ANTHROPIC_MODEL="${ANTHROPIC_MODEL:-}" \
   -e CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS="${CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS:-}" \
   -e ANTHROPIC_TARGET_API_URL="${VERTEX_PROXY_URL_FOR_CONTAINER}" \
+  -e SANDBOX_AGENT="${SANDBOX_AGENT}" \
+  ${AGENT_ENV[@]+"${AGENT_ENV[@]}"} \
   -w /workspace \
   "${SANDBOX_IMAGE_REF}" /home/claude/start_script.sh "$@"
 

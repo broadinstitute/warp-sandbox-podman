@@ -83,6 +83,14 @@ echo "=== store contents ==="
 podman --root "$STORE" images --format "  {{.Repository}}:{{.Tag}}  {{.Size}}"
 echo
 du -sh "$STORE" | sed 's/^/  store size: /'
+# The pins baked into this build. Read from image metadata, not by running a
+# container: a rootful run would write container state into the shared store.
+# (Each tool's --version already ran inside its own build step.)
+echo
+echo "=== tool versions ==="
+podman --root "$STORE" image inspect "claude-sandbox:${TAG_VERSION}" \
+    --format '{{range .Config.Env}}{{println .}}{{end}}' \
+  | awk -F= '$1 ~ /^(CLAUDE_CODE|AGY|CODEGRAPH)_VERSION$/ {printf "  %-22s %s\n", $1, $2}'
 
 cat <<EOF
 

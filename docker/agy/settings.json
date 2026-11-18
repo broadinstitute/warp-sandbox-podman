@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "deny": [
+      "command(git push)",
+      "command(git remote add)",
+      "command(git remote set-url)"
+    ]
+  },
+  "trustedWorkspaces": [
+    "/workspace"
+  ]
+}

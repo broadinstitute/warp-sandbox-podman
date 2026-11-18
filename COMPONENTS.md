@@ -236,7 +236,7 @@ in-process inotify watcher (2 s debounce) keeps the SQLite index live.
 
 The index is built per workdir by the SessionStart hook
 `claude-sandbox-shared/.claude/hooks/codegraph-init.sh`, which detach-spawns
-`codegraph init -i` when `/workspace` is a git repo and
+`codegraph init -y` when `/workspace` is a git repo and
 `/workspace/.codegraph/codegraph.db` is missing. The prompt does not block on it;
 queries during the initial index return partial results. Later sessions reuse the
 index, which lives in `/workspace/.codegraph/` and therefore persists across

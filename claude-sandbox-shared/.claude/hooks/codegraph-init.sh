@@ -7,7 +7,7 @@
 #   - .codegraph/init-complete present → exit (DB is fully populated; the
 #     watcher inside `codegraph serve --mcp` keeps it current).
 #   - codegraph binary missing      → exit (image wasn't rebuilt yet).
-#   - Otherwise: spawn `codegraph init -i` detached in the background under
+#   - Otherwise: spawn `codegraph init -y` detached in the background under
 #     a flock so a second concurrent session can't start a duplicate
 #     indexer. The sentinel is written ONLY when init exits 0 — a SIGKILL'd
 #     init leaves a partial DB but no sentinel, so the next session retries
@@ -58,7 +58,9 @@ mkdir -p "$CG_DIR"
             exit 0
         fi
         cd "$WS"
-        if codegraph init -i; then
+        # -y: never prompt (stdin is /dev/null here). -i is deprecated since
+        # codegraph v1: init now always builds the index.
+        if codegraph init -y; then
             : > "$SENTINEL"
             printf -- "--- codegraph init complete: %s ---\n" "$(date -u +%FT%TZ)"
         else

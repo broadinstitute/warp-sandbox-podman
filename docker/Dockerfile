@@ -7,7 +7,9 @@
 # Qualifying is a no-op for Docker and required for podman.
 FROM docker.io/library/eclipse-temurin:17-jdk AS temurin
 
-FROM docker.io/library/node:22-slim
+# Node 24: the maintenance LTS line (supported to April 2028). Claude Code needs
+# Node >= 18; the bump from 22 is for base-image security support, not features.
+FROM docker.io/library/node:24-slim
 
 ################################################################################
 
@@ -41,7 +43,12 @@ RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | \
 # write-semantics change between unpinned builds is exactly the kind of
 # thing that produced the bind-mounted-credentials persistence bug
 # (see commit ee421d5).
-ENV CLAUDE_CODE_VERSION=2.1.283
+#
+# The version is the npm `stable` dist-tag at the time of the bump, which trails
+# `latest` by about a week and skips releases with known regressions. A shared
+# host cannot self-update, so it should not sit on the bleeding edge either.
+# scripts/bump-versions.sh prints both tags and rewrites this line.
+ENV CLAUDE_CODE_VERSION=2.1.311
 RUN npm install -g "@anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}" \
     && claude --version
 
@@ -54,10 +61,45 @@ RUN npm install -g "@anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}" \
 # Version pinned. Bump CODEGRAPH_VERSION and `make rebuild` (forces --no-cache
 # --pull) when a newer release is wanted; tracking "latest" silently in the
 # image would make builds non-reproducible.
-ENV CODEGRAPH_VERSION=v0.9.9
-RUN curl -fsSL https://raw.githubusercontent.com/colbymchenry/codegraph/main/install.sh \
+#
+# The installer is fetched from the SAME tag it installs, not from `main`: an
+# unpinned installer script can change what a pinned version means.
+ENV CODEGRAPH_VERSION=v1.6.3
+RUN curl -fsSL "https://raw.githubusercontent.com/colbymchenry/codegraph/${CODEGRAPH_VERSION}/install.sh" \
     | CODEGRAPH_INSTALL_DIR=/opt/codegraph CODEGRAPH_BIN_DIR=/usr/local/bin sh \
     && /usr/local/bin/codegraph --version
+
+# Antigravity CLI (`agy`), Google's terminal agent: the second agent this image
+# runs (SANDBOX_AGENT=agy). A single static binary.
+#
+# Pinned by URL + sha512, both copied from Google's release manifest
+# (https://antigravity-cli-auto-updater-974169037036.us-central1.run.app/manifests/linux_amd64.json,
+# the file the official install.sh reads). scripts/bump-versions.sh reads the
+# manifest and rewrites these three lines.
+#
+# /usr/local/bin is deliberate. agy updates itself in the background, but only
+# when it can write the directory its binary is in; the container user cannot
+# write /usr/local/bin, so the updater skips (measured: "Directory /usr/local/bin
+# is not fully accessible (readable: true, writable: false), skipping update").
+# That keeps every user on the pinned version, the same job DISABLE_AUTOUPDATER
+# does for claude. Install it under $HOME and each user would silently drift, and
+# a 270 MB download would land in their persisted state on every release.
+ENV AGY_VERSION=1.5.11
+ARG AGY_URL=https://storage.googleapis.com/antigravity-public/antigravity-cli/1.5.11-6132547114106880/linux-x64/cli_linux_x64.tar.gz
+ARG AGY_SHA512=dad3c015e8964fcdc1639b13b7152f4cb84cb1bde385707e2bcdf095d6f1831f4f6521199aec499cc052f9e99906b7fdbc52c273df064d5cb7c84b068ba3ce50
+RUN curl -fsSL -o /tmp/agy.tar.gz "${AGY_URL}" \
+    && echo "${AGY_SHA512}  /tmp/agy.tar.gz" | sha512sum -c - \
+    && tar -xzf /tmp/agy.tar.gz -C /tmp antigravity \
+    && install -m 0755 /tmp/antigravity /usr/local/bin/agy \
+    && rm -f /tmp/agy.tar.gz /tmp/antigravity \
+    && agy --version
+
+# The sandbox's defaults for agy: its rules file (the counterpart of
+# claude-sandbox-shared/.claude/CLAUDE.md) and the settings start_script.sh
+# merges into each user's own settings on every agy launch. Read-only here;
+# a user's copy lives in their persisted ~/.gemini.
+COPY agy/ /opt/sandbox/agy/
+RUN chmod -R a+rX /opt/sandbox
 
 # Default UID/GID baked at build. The runtime entrypoint
 # (uid-fixup-entrypoint.sh) remaps these to match the host invoker via
@@ -80,7 +122,7 @@ RUN userdel -r node 2>/dev/null || true && \
 # uv, pinned, copied from Astral's published image. Preferred over `curl | sh`
 # (no network fetch inside a RUN layer) and over `pip install uv` (no pip
 # bootstrap, which is the thing we are removing). Bump this tag to update uv.
-COPY --from=ghcr.io/astral-sh/uv:0.12.3 /uv /uvx /usr/local/bin/
+COPY --from=ghcr.io/astral-sh/uv:0.13.9 /uv /uvx /usr/local/bin/
 
 # Python environment, built by uv rather than `python3 -m venv` + pip.
 #
@@ -132,7 +174,7 @@ RUN uv venv --python "${CLAUDE_VENV_PYTHON}" /opt/claude-venv && \
     uv pip install --python /opt/claude-venv/bin/python --no-cache \
       numpy pandas matplotlib scipy scikit-learn seaborn \
       ipython jupyter requests anndata "scanpy[leiden]" "numba<0.67" \
-      "headroom-ai[proxy]==0.24.0" && \
+      "headroom-ai[proxy]==0.44.0" && \
     chown -R claude:claude /opt/claude-venv /opt/uv-python
 
 # fiss-mcp lives on the HOST, not in the container. The launcher

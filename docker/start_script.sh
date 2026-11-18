@@ -1,6 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Which agent this container runs, set by the launcher from SANDBOX_AGENT:
+#   claude  Claude Code (the default)
+#   agy     Antigravity CLI, Google's terminal agent
+#   shell   bash, with the Claude setup below applied, for debugging
+SANDBOX_AGENT="${SANDBOX_AGENT:-claude}"
+
 # Start the postfix service for mail notifications.
 #
 # Non-fatal. Mail is optional (the notify hooks no-op when CLAUDE_NOTIFY_EMAIL
@@ -36,6 +42,14 @@ fi
 if [[ -n "${SANDBOX_GIT_USER_EMAIL:-}${SANDBOX_GIT_USER_NAME:-}" ]]; then
   echo "git identity: ${SANDBOX_GIT_USER_NAME:-?} <${SANDBOX_GIT_USER_EMAIL:-?}> (commits local only; no push credentials in sandbox)"
 fi
+
+# ======================================================= Claude Code setup ==
+# Everything from here to "end Claude Code setup" configures claude: the
+# Anthropic routing (Vertex, Headroom), its MCP entries in ~/.claude.json, and
+# the plugin pin checks. None of it applies to agy, whose container does not
+# even mount the Claude state, so it is skipped there. (Not re-indented, to keep
+# the history of this block readable.)
+if [[ "$SANDBOX_AGENT" != "agy" ]]; then
 
 # Vertex routing signal (Option B). When the host launcher spawned
 # vertex_proxy.py and forwarded its URL via ANTHROPIC_TARGET_API_URL, that
@@ -237,6 +251,104 @@ check_pin() {
 check_pin caveman 8b0c1d3699b8d83e87fe4605b378da20c41555e0
 check_pin ponytail 0a4dd63ad4541f4f655c4108a295916f3c1d8fda
 
+fi  # ================================================= end Claude Code setup ==
+
+# ========================================================= Antigravity setup ==
+# agy keeps its state in ~/.gemini (settings, sign-in token, conversations) and
+# ~/.config/antigravity (plugin secrets). The launcher bind-mounts both from the
+# user's own state directory, and only into an agy container, so a Claude
+# session never sees the Antigravity token and vice versa.
+#
+# Nothing here signs in. The first `agy` run asks how to sign in and, with no
+# browser in the container, prints a URL to open on your laptop and waits for the
+# code; with no D-Bus session it stores the token in a file under ~/.gemini
+# (measured: "Using file-based token storage because no D-Bus session bus
+# detected"), which is what makes it persist across launches.
+AGY_DEFAULTS=/opt/sandbox/agy
+
+# Point $1 at $2 with a symlink, unless $1 is the user's own regular file.
+link_rule() {
+  local link="$1" target="$2"
+  if [[ -e "$link" && ! -L "$link" ]]; then
+    echo "agy: keeping your own $(basename "$link") (not linking it to ${target})"
+    return 0
+  fi
+  ln -sfn "$target" "$link"
+}
+
+setup_agy() {
+  local settings="${HOME}/.gemini/antigravity-cli/settings.json" tmp
+  mkdir -p "${HOME}/.gemini/antigravity-cli" "${HOME}/.gemini/config" "${HOME}/.config/antigravity"
+
+  # Settings: seed on first launch, then on every launch re-assert only the
+  # sandbox's own entries (the deny rules and the trusted /workspace), merged
+  # into whatever the user has set. A user's model choice, allow rules and other
+  # preferences survive; the deny rules cannot be removed by editing the file.
+  [[ -s "$settings" ]] || cp "${AGY_DEFAULTS}/settings.json" "$settings"
+  tmp="${settings}.sandbox-tmp"
+  # GEMINI_API_KEY decides the model provider. With a key, agy needs
+  # "modelProvider": "gemini" in settings or it ignores the key; without one,
+  # that same setting makes agy refuse to start. So derive it from the env.
+  if jq -s --arg key "${GEMINI_API_KEY:+set}" '
+        .[1] as $sbx | .[0]
+        | .permissions.deny = (((.permissions.deny // []) + ($sbx.permissions.deny // [])) | unique)
+        | .trustedWorkspaces = (((.trustedWorkspaces // []) + ($sbx.trustedWorkspaces // [])) | unique)
+        | if $key == "set" then .modelProvider = "gemini"
+          elif .modelProvider == "gemini" then del(.modelProvider)
+          else . end' \
+        "$settings" "${AGY_DEFAULTS}/settings.json" > "$tmp" 2>/dev/null; then
+    cat "$tmp" > "$settings"
+  else
+    echo "agy: WARNING — ${settings} is not valid JSON; sandbox deny rules NOT applied." >&2
+  fi
+  rm -f "$tmp"
+  if [[ -n "${GEMINI_API_KEY:-}" ]]; then
+    echo "agy: model provider = Gemini API key (GEMINI_API_KEY)"
+  else
+    echo "agy: model provider = Google sign-in (first run prints a URL to open on your laptop)"
+  fi
+
+  # Global rules. ~/.gemini/GEMINI.md and ~/.gemini/AGENTS.md are both read as
+  # global rules (symlinks allowed). GEMINI.md carries the sandbox rules;
+  # AGENTS.md is warp/AGENTS.md, the role ~/.claude/CLAUDE.md's @import plays
+  # for Claude. A user's own regular file at either path is left alone.
+  link_rule "${HOME}/.gemini/GEMINI.md" "${AGY_DEFAULTS}/GEMINI.md"
+  local agents_md
+  for agents_md in /workspace/warp/AGENTS.md /projects/warp/AGENTS.md; do
+    if [[ -f "$agents_md" ]]; then
+      link_rule "${HOME}/.gemini/AGENTS.md" "$agents_md"
+      break
+    fi
+  done
+
+  # MCP servers, through agy's own CLI rather than by writing its config file,
+  # so a change of format between agy releases cannot silently break them.
+  # `agy mcp add` replaces an existing entry; `remove` of a missing one exits 1.
+  if [[ "${FISS_MCP:-1}" == "1" && -n "${FISS_MCP_URL:-}" ]]; then
+    agy mcp add fiss-mcp "${FISS_MCP_URL}" >/dev/null
+    if [[ "${FISS_MCP_ALLOW_WRITES:-0}" == "1" ]]; then
+      echo $'\033[1;31m'"fiss-mcp: ON  ${FISS_MCP_URL}  (WRITE MODE — the agent can submit workflows and spend money)"$'\033[0m'
+    else
+      echo "fiss-mcp: ON  ${FISS_MCP_URL}  (read-only)"
+    fi
+  else
+    agy mcp remove fiss-mcp >/dev/null 2>&1 || true
+    echo "fiss-mcp: OFF"
+  fi
+  if [[ "${CODEGRAPH:-1}" == "1" ]] && command -v codegraph >/dev/null 2>&1; then
+    agy mcp add codegraph codegraph serve --mcp >/dev/null
+    echo "codegraph: ON  $(codegraph --version 2>/dev/null || echo '(version unknown)')"
+  else
+    agy mcp remove codegraph >/dev/null 2>&1 || true
+    echo "codegraph: OFF"
+  fi
+}
+
+if [[ "$SANDBOX_AGENT" == "agy" ]]; then
+  setup_agy
+fi
+# ===================================================== end Antigravity setup ==
+
 # Agent instructions. warp/AGENTS.md is loaded by an @import in
 # ~/.claude/CLAUDE.md (claude-sandbox-shared/.claude/CLAUDE.md), so this script
 # writes nothing into /workspace and never touches a repo's files.
@@ -273,5 +385,11 @@ if [[ -e /workspace/CLAUDE.md ]]; then
   echo "${YEL}  from your workspace directory on the host (see FAQ.md).${RST}"
 fi
 
-# Run claude:
-claude "$@"
+# Run the agent. Not `exec`: the EXIT trap above still has to stop headroom.
+case "$SANDBOX_AGENT" in
+  claude) claude "$@" ;;
+  agy)    agy "$@" ;;
+  shell)  bash ;;
+  *)      echo "start_script: unknown SANDBOX_AGENT '${SANDBOX_AGENT}' (claude, agy or shell)" >&2
+          exit 2 ;;
+esac
