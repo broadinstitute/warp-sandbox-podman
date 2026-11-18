@@ -324,10 +324,29 @@ application-default credentials inside the container.
   `command(git remote add)` and `command(git remote set-url)`, and trust
   `/workspace`. A user's model, allow rules and other preferences are kept; the deny
   rules come back if deleted.
+- **No permission prompts**: the merge also sets `"toolPermission": "always-proceed"`
+  when the key is absent. That is agy's no-prompts mode, the one
+  `--dangerously-skip-permissions` selects, and the counterpart of Claude's
+  `bypassPermissions` here. The deny rules still apply under it (agy's changelog:
+  "your explicit deny rules still apply"), and so does agy's built-in command
+  denylist. A user who picks another Tool Permission in `/config` keeps it, since
+  only a missing key is filled in. Plans in `/plan` mode still wait for review;
+  that is the separate Artifact Review setting.
 - **Rules**: `~/.gemini/GEMINI.md` links to `/opt/sandbox/agy/GEMINI.md`, the
   sandbox rules (the counterpart of `~/.claude/CLAUDE.md`), and
   `~/.gemini/AGENTS.md` links to `/workspace/warp/AGENTS.md`. agy reads both as
   global rules. A user's own regular file at either path is left alone.
+- **caveman and ponytail**: written as always-on rules,
+  `~/.gemini/config/rules/sandbox-caveman.md` and `sandbox-ponytail.md`. Each is the
+  plugin's own text for agents without hooks (caveman's
+  `src/rules/caveman-activate.md`, ponytail's `.agents/rules/ponytail.md`), copied
+  verbatim into `docker/agy/rules/`, plus the `trigger: always_on` frontmatter
+  without which agy silently drops a rule file. agy installs neither plugin and runs
+  neither one's hooks, so the `/caveman` and `/ponytail` commands are Claude-only;
+  "stop caveman", "stop ponytail" and "normal mode" work as plain requests. The
+  caveman text is the short one (caveman's full ruleset, which Claude gets, is
+  several times longer): kept simple on purpose, at some cost in how strictly agy
+  sticks to it. If writing them fails, agy starts without them.
 - **MCP**: `agy mcp add fiss-mcp <url>` and
   `agy mcp add codegraph codegraph serve --mcp`, through agy's CLI rather than by
   writing its config file, so a format change between releases cannot break them.

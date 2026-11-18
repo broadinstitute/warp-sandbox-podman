@@ -276,6 +276,27 @@ link_rule() {
   ln -sfn "$target" "$link"
 }
 
+# caveman and ponytail. Claude gets them as plugins whose hooks switch each mode
+# on in every session. agy runs neither plugin, so it gets each one's own
+# always-on rule text instead: verbatim copies in /opt/sandbox/agy/rules
+# (docker/agy/rules, refreshed when a plugin is bumped, see PLUGIN_PINS.md), each
+# written to ~/.gemini/config/rules/sandbox-<name>.md with the frontmatter agy
+# requires (a rule file without it is silently dropped). Rewritten every launch;
+# a user's other rule files are not touched.
+write_mode_rules() {
+  local dir="${HOME}/.gemini/config/rules" body name names=""
+  mkdir -p "$dir"
+  rm -f "$dir"/sandbox-*.md
+  for body in "${AGY_DEFAULTS}"/rules/*.md; do
+    [[ -f "$body" ]] || continue
+    name="$(basename "$body" .md)"
+    { printf -- '---\ntrigger: always_on\ndescription: "%s mode, from the %s plugin (sandbox default)"\n---\n\n' "$name" "$name"
+      cat "$body"; } > "${dir}/sandbox-${name}.md" || return 1
+    names="${names:+${names}, }${name}"
+  done
+  echo "agy: always-on rules: ${names:-none}"
+}
+
 setup_agy() {
   local settings="${HOME}/.gemini/antigravity-cli/settings.json" tmp
   mkdir -p "${HOME}/.gemini/antigravity-cli" "${HOME}/.gemini/config" "${HOME}/.config/antigravity"
@@ -289,10 +310,15 @@ setup_agy() {
   # GEMINI_API_KEY decides the model provider. With a key, agy needs
   # "modelProvider": "gemini" in settings or it ignores the key; without one,
   # that same setting makes agy refuse to start. So derive it from the env.
+  # toolPermission "always-proceed" is agy's no-prompts mode (what
+  # --dangerously-skip-permissions sets), the counterpart of Claude's
+  # bypassPermissions here. Set only when absent, so a user's own choice in
+  # /config (Tool Permission) stays. Deny rules still apply under it.
   if jq -s --arg key "${GEMINI_API_KEY:+set}" '
         .[1] as $sbx | .[0]
         | .permissions.deny = (((.permissions.deny // []) + ($sbx.permissions.deny // [])) | unique)
         | .trustedWorkspaces = (((.trustedWorkspaces // []) + ($sbx.trustedWorkspaces // [])) | unique)
+        | .toolPermission //= "always-proceed"
         | if $key == "set" then .modelProvider = "gemini"
           elif .modelProvider == "gemini" then del(.modelProvider)
           else . end' \
@@ -307,6 +333,7 @@ setup_agy() {
   else
     echo "agy: model provider = Google sign-in (first run prints a URL to open on your laptop)"
   fi
+  echo "agy: tool permission = $(jq -r '.toolPermission // "request-review"' "$settings" 2>/dev/null || echo unknown)  (change: /config → Tool Permission)"
 
   # Global rules. ~/.gemini/GEMINI.md and ~/.gemini/AGENTS.md are both read as
   # global rules (symlinks allowed). GEMINI.md carries the sandbox rules;
@@ -320,6 +347,8 @@ setup_agy() {
       break
     fi
   done
+
+  write_mode_rules || echo "agy: WARNING — could not write the caveman/ponytail rules; agy starts without them." >&2
 
   # MCP servers, through agy's own CLI rather than by writing its config file,
   # so a change of format between agy releases cannot silently break them.

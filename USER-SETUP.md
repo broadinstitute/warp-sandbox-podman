@@ -86,6 +86,15 @@ reattach. Inside, `Ctrl-b d` detaches on purpose and leaves it running. Claude a
 Antigravity can run at the same time, against the same workspace. Set
 `SANDBOX_NO_TMUX=1` to run in the foreground instead.
 
+**Neither agent asks permission.** Inside the container, Claude
+(`bypassPermissions`) and Antigravity (Tool Permission `always-proceed`) edit files
+and run commands without prompting. The sandbox's deny rules still hold, such as no
+`git push`. To get Antigravity's prompts back, choose `request-review` under
+`/config` → Tool Permission; that choice stays. caveman (short replies) and ponytail
+(least code that works) are on in both. Say "stop caveman", "stop ponytail" or
+"normal mode" to drop them for a session. The `/caveman` and `/ponytail` commands
+exist only in Claude.
+
 **Commit inside, push outside.** The container holds no git credentials, so the
 agent can commit but not push. Review and push from the host:
 

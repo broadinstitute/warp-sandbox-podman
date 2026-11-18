@@ -66,7 +66,17 @@ The probe is non-blocking; it never wipes the cache automatically.
    jq 'del(.caveman)' claude-sandbox-shared/.claude/plugins/known_marketplaces.json \
      > /tmp/km.json && mv /tmp/km.json claude-sandbox-shared/.claude/plugins/known_marketplaces.json
    ```
-6. Commit message should reference both the old and new SHAs so the
+6. Refresh agy's copy of the plugin's always-on rule, then rebuild the image
+   (agy runs neither plugin; it gets this one file, baked into the image):
+   ```bash
+   M=claude-sandbox-shared/.claude/plugins/marketplaces
+   cp $M/caveman/src/rules/caveman-activate.md docker/agy/rules/caveman.md
+   cp $M/ponytail/.agents/rules/ponytail.md   docker/agy/rules/ponytail.md
+   ```
+   If upstream moved or dropped that file, find its replacement before bumping
+   rather than leaving agy on the old text. `cmp` of the same pairs shows whether a
+   copy is current.
+7. Commit message should reference both the old and new SHAs so the
    upstream-rewrite case stays auditable.
 
 To verify the upstream tag's SHA matches what we vendored, use the

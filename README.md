@@ -170,8 +170,9 @@ claim is verified by probe in
 - **Review is the real control on what leaves the machine.** The agent cannot
   reach GitHub, but it can author something you then push — including CI workflow
   changes. `git diff origin/HEAD..HEAD` before pushing is the gate.
-- **Local git history is unprotected.** Under `bypassPermissions`,
-  `git reset --hard` and friends work inside the mounted checkouts. Nothing leaves
+- **Local git history is unprotected.** Under `bypassPermissions` (Claude) and
+  `always-proceed` (Antigravity), `git reset --hard` and friends work inside the
+  mounted checkouts. Nothing leaves
   the machine, but unpushed work can be destroyed. [Deny rules close
   this](CONFIG.md#two-things-this-does-not-protect).
 - **Network egress is unrestricted.** The agent can reach the Anthropic API, npm,
@@ -204,6 +205,7 @@ claim is verified by probe in
   [ponytail](https://github.com/DietrichGebert/ponytail) (writes less code for the
   same result). Both on by default, both pinned by commit SHA and re-checked at
   container boot — see [PLUGIN_PINS.md](claude-sandbox-shared/.claude/PLUGIN_PINS.md).
+  Antigravity gets each one's always-on rule text instead of the plugin.
 - **Email notification** for prompts that outlive a threshold (default 120 s),
   off unless `CLAUDE_NOTIFY_EMAIL` is set.
 - **Resource ceilings** — `--memory`, `--cpus`, `--shm-size`, enforced through

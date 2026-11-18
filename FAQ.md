@@ -485,6 +485,18 @@ container. So check that the variable is exported in
 (only agy containers receive it). The launch prints which provider is in effect:
 `agy: model provider = Gemini API key (GEMINI_API_KEY)`.
 
+### agy asks before every edit or command
+
+It should not on images built since 2026-11-18. Each launch sets Tool Permission to
+`always-proceed` unless you already chose a Tool Permission yourself, and prints
+what is in effect: `agy: tool permission = always-proceed`. If that line shows
+`request-review` or `strict`, the value was saved from `/config`; change it back
+there. For a single session, `sandbox agy --dangerously-skip-permissions` does the
+same. Exit a running agy first, because `sandbox agy` reattaches to it and ignores
+arguments. Two kinds of pause remain by design: commands the sandbox denies
+(`git push`), and plans in `/plan` mode, which wait for review unless you change
+Artifact Review in `/config`.
+
 ### Is agy's version up to date? Can it update itself?
 
 Not by itself, deliberately. It is pinned in the image, and its self-updater skips
