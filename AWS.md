@@ -119,13 +119,15 @@ Verified from an ordinary account: `curl 169.254.169.254` fails with
 ```bash
 ssh admin@<ip>
 sudo systemd-run --unit=sandbox-image-build --collect \
-  -p StandardOutput=file:/var/log/sandbox-image-build.log \
-  -p StandardError=file:/var/log/sandbox-image-build.log \
+  -p StandardOutput=truncate:/var/log/sandbox-image-build.log \
+  -p StandardError=truncate:/var/log/sandbox-image-build.log \
   /mnt/sandbox/repo/scripts/build-shared-image.sh
 sudo tail -f /var/log/sandbox-image-build.log
 ```
 
-`systemd-run` keeps the build going if your SSH session drops. Plain
+`systemd-run` keeps the build going if your SSH session drops; `truncate:` starts
+the log afresh (`file:` would overwrite it in place, leaving the end of the
+previous build's log after a shorter one). Plain
 `sudo /mnt/sandbox/repo/scripts/build-shared-image.sh` works too. **While the
 first build runs, users cannot use podman**: the store is root-only until the
 build finishes and opens it up, and `podman` reports
@@ -173,7 +175,8 @@ git diff; git commit -am "bump sandbox tools"; git push
 # host
 ssh admin@<ip>
 cd /mnt/sandbox/repo && git pull && chmod -R a+rX .
-sudo ./scripts/build-shared-image.sh          # or under systemd-run as above
+sudo ./scripts/build-shared-image.sh          # or under systemd-run as above; a
+                                              # cached rebuild takes about a minute
 sudo ./scripts/build-shared-image.sh --prune  # reclaim the old image, ~9 GB
 ```
 

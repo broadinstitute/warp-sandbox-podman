@@ -80,7 +80,7 @@ source env.main.sh
 # 2. Check the host and build the host-side fiss-mcp venv. Installs nothing.
 ./setup_host.sh
 
-# 3. Build the image. Takes ~36 minutes and ~9.0 GB the first time.
+# 3. Build the image: ~9.8 GB, minutes on a fast connection (4 on the AWS host).
 cd docker && make && cd ..
 
 # 4. Launch.

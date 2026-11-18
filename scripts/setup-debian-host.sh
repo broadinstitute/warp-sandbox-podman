@@ -13,7 +13,8 @@
 #
 # It automates the host half of SERVER.md: "Host packages", "Format and mount the
 # data disk", the shared directories, and the checkout. What it does NOT do:
-# build the image (scripts/build-shared-image.sh, ~30 min, run it next) or
+# build the image (scripts/build-shared-image.sh, ~5 min on an r6a.2xlarge,
+# run it next) or
 # create users (scripts/add-sandbox-user.sh).
 #
 # Options
@@ -230,7 +231,7 @@ cat <<EOF
 
 $(say "host ready")
 Next (AWS.md / SERVER.md):
-  1. Build the image, ~30 min:  sudo ${REPO}/scripts/build-shared-image.sh
+  1. Build the image (~5 min): sudo ${REPO}/scripts/build-shared-image.sh
   2. Add each user:             sudo ${REPO}/scripts/add-sandbox-user.sh <name> <pubkey-file>
   3. Each user logs in and runs: sandbox setup
 EOF
