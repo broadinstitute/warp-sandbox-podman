@@ -62,26 +62,6 @@
     "type": "command",
     "command": "~/.claude/hooks/caveman-statusline.sh"
   },
-  "enabledPlugins": {
-    "caveman@caveman": true,
-    "ponytail@ponytail": true
-  },
-  "extraKnownMarketplaces": {
-    "caveman": {
-      "source": {
-        "source": "github",
-        "repo": "JuliusBrussee/caveman",
-        "ref": "v2.7.0"
-      }
-    },
-    "ponytail": {
-      "source": {
-        "source": "github",
-        "repo": "DietrichGebert/ponytail",
-        "ref": "v4.9.0"
-      }
-    }
-  },
   "effortLevel": "xhigh",
   "skipDangerousModePermissionPrompt": true,
   "theme": "dark",

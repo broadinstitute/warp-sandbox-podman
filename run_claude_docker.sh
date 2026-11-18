@@ -1087,10 +1087,11 @@ fi
 # baked into the image layer with no bind mount, and the container runs --rm, so
 # any update would be downloaded into the ephemeral overlay, thrown away on
 # exit, and re-downloaded on every launch — while silently drifting off the
-# CLAUDE_CODE_VERSION pin the Dockerfile keeps for reproducibility.
+# version the image records (CLAUDE_CODE_VERSION), the one every user shares.
 #
-# The supported upgrade path is to bump CLAUDE_CODE_VERSION in docker/Dockerfile
-# and re-run make. Set DISABLE_AUTOUPDATER=0 to get the warning back.
+# The supported upgrade path is an image rebuild, which installs the newest
+# release (scripts/resolve-latest.sh). Set DISABLE_AUTOUPDATER=0 to get the
+# warning back.
 #
 # On the podman path: HOST_UID / HOST_GID are deliberately passed empty.
 # --userns=keep-id has already put us on the image's claude uid before the

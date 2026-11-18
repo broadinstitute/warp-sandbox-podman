@@ -46,7 +46,7 @@ fi
 # ======================================================= Claude Code setup ==
 # Everything from here to "end Claude Code setup" configures claude: the
 # Anthropic routing (Vertex, Headroom), its MCP entries in ~/.claude.json, and
-# the plugin pin checks. None of it applies to agy, whose container does not
+# the plugins it loads. None of it applies to agy, whose container does not
 # even mount the Claude state, so it is skipped there. (Not re-indented, to keep
 # the history of this block readable.)
 if [[ "$SANDBOX_AGENT" != "agy" ]]; then
@@ -187,69 +187,21 @@ else
   echo "codegraph: OFF"
 fi
 
-# Plugin pin drift detection. settings.json pins each marketplace to a tag,
-# but Claude Code may have an older cached marketplace whose source predates
-# the pin (or someone could have force-moved the upstream tag). Compare the
-# git HEAD of each cached marketplace against the expected SHA recorded in
-# ~/.claude/PLUGIN_PINS.md and warn loudly on mismatch.
-#
-# Bump procedure: when bumping the ref in settings.json, update PLUGIN_PINS.md
-# AND the EXPECTED_SHA value below. The values must agree.
-#
-# Non-fatal: prints a banner, does not block claude. To force re-resolve at
-# the pinned ref, wipe the cache:
-#   rm -rf ~/.claude/plugins/marketplaces/<name> \
-#          ~/.claude/plugins/cache/<name> \
-#          ~/.claude/plugins/data/<name>-<name>
-#   jq 'del(.["<name>"])' ~/.claude/plugins/known_marketplaces.json > tmp \
-#     && mv tmp ~/.claude/plugins/known_marketplaces.json
-# then restart the sandbox.
-check_pin() {
-  # Separate `local` lines — bash evaluates all RHS expressions on a
-  # single `local a=... b=$a` declaration BEFORE any LHS assignment
-  # commits, so `$name` on the right-hand side of repo_dir was unbound
-  # under `set -u` (verified on bash 5.2). Split form is safe across
-  # bash versions.
-  local name="$1"
-  local expected="$2"
-  local repo_dir="$HOME/.claude/plugins/marketplaces/$name"
-  if [[ ! -d "$repo_dir" ]]; then
-    echo "pin-check ($name): marketplace not yet installed — will resolve at pinned ref on first use."
-    return 0
-  fi
-  if [[ ! -d "$repo_dir/.git" ]]; then
-    # Vendored: .git stripped at vendoring time per PLUGIN_PINS.md
-    # bump procedure. Drift is caught at commit review, not at boot.
-    # The git SHA the tree was cut from is recorded in PLUGIN_PINS.md
-    # and is the source of truth. Emit an informational line, not a
-    # scary warning.
-    echo "pin-check ($name): vendored (expected $expected — trust the commit that vendored it)"
-    return 0
-  fi
-  local actual
-  actual=$(git -C "$repo_dir" rev-parse HEAD 2>/dev/null || echo "")
-  if [[ -z "$actual" ]]; then
-    echo "pin-check ($name): could not read git HEAD at $repo_dir"
-    return 0
-  fi
-  if [[ "$actual" == "$expected" ]]; then
-    echo "pin-check ($name): OK at $expected"
-    return 0
-  fi
-  local RED=$'\033[1;31m' YEL=$'\033[1;33m' RST=$'\033[0m'
-  echo
-  echo "${RED}===== PIN DRIFT WARNING =====${RST}"
-  echo "${YEL}Plugin/marketplace:  $name${RST}"
-  echo "${YEL}Expected commit:     $expected${RST}"
-  echo "${YEL}Installed commit:    $actual${RST}"
-  echo "${YEL}See ~/.claude/PLUGIN_PINS.md for the bump/verify procedure.${RST}"
-  echo "${YEL}To force re-resolve, wipe the cache (see check_pin source comment).${RST}"
-  echo "${RED}=============================${RST}"
-  echo
-}
-# Keep in sync with claude-sandbox-shared/.claude/PLUGIN_PINS.md.
-check_pin caveman 8b0c1d3699b8d83e87fe4605b378da20c41555e0
-check_pin ponytail 0a4dd63ad4541f4f655c4108a295916f3c1d8fda
+# caveman and ponytail come from the image (/opt/sandbox/plugins: each one's
+# newest release as of the image build) and load with --plugin-dir, added to the
+# claude command line at the bottom of this script. Nothing is installed into the
+# user's own state, so there is nothing per user to go stale. A plugin of the
+# same name that an older settings.json still installs from a marketplace is
+# overridden by these (Claude Code: "--plugin-dir ... local dev copies now
+# override installed marketplace plugins with the same name").
+CLAUDE_PLUGIN_ARGS=()
+plugin_names=""
+for d in /opt/sandbox/plugins/*/; do
+  [[ -f "${d}.claude-plugin/plugin.json" ]] || continue
+  CLAUDE_PLUGIN_ARGS+=(--plugin-dir "${d%/}")
+  plugin_names="${plugin_names:+${plugin_names}, }$(basename "$d") $(jq -r '.version // "?"' "${d}.claude-plugin/plugin.json" 2>/dev/null || echo '?')"
+done
+echo "plugins: ${plugin_names:-none} (from the image)"
 
 fi  # ================================================= end Claude Code setup ==
 
@@ -278,20 +230,29 @@ link_rule() {
 
 # caveman and ponytail. Claude gets them as plugins whose hooks switch each mode
 # on in every session. agy runs neither plugin, so it gets each one's own
-# always-on rule text instead: verbatim copies in /opt/sandbox/agy/rules
-# (docker/agy/rules, refreshed when a plugin is bumped, see PLUGIN_PINS.md), each
-# written to ~/.gemini/config/rules/sandbox-<name>.md with the frontmatter agy
-# requires (a rule file without it is silently dropped). Rewritten every launch;
-# a user's other rule files are not touched.
+# always-on rule text instead, read from the image's copy of the plugin
+# (/opt/sandbox/plugins, the newest release as of the image build): the file each
+# plugin ships for agents without hooks. Each is written to
+# ~/.gemini/config/rules/sandbox-<name>.md with the frontmatter agy requires (a
+# rule file without it is silently dropped), unless the plugin's file already has
+# frontmatter of its own. Rewritten every launch; a user's other rule files are not
+# touched. A plugin release that moved its file is skipped with a warning.
 write_mode_rules() {
-  local dir="${HOME}/.gemini/config/rules" body name names=""
+  local dir="${HOME}/.gemini/config/rules" spec name src names=""
   mkdir -p "$dir"
   rm -f "$dir"/sandbox-*.md
-  for body in "${AGY_DEFAULTS}"/rules/*.md; do
-    [[ -f "$body" ]] || continue
-    name="$(basename "$body" .md)"
-    { printf -- '---\ntrigger: always_on\ndescription: "%s mode, from the %s plugin (sandbox default)"\n---\n\n' "$name" "$name"
-      cat "$body"; } > "${dir}/sandbox-${name}.md" || return 1
+  for spec in caveman:src/rules/caveman-activate.md ponytail:.agents/rules/ponytail.md; do
+    name="${spec%%:*}" src="/opt/sandbox/plugins/${spec%%:*}/${spec#*:}"
+    if [[ ! -f "$src" ]]; then
+      echo "agy: WARNING — this image's ${name} has no ${spec#*:}; agy runs without ${name}." >&2
+      continue
+    fi
+    if [[ "$(head -n 1 "$src")" == "---" ]]; then
+      cp "$src" "${dir}/sandbox-${name}.md" || return 1
+    else
+      { printf -- '---\ntrigger: always_on\ndescription: "%s mode, from the %s plugin (sandbox default)"\n---\n\n' "$name" "$name"
+        cat "$src"; } > "${dir}/sandbox-${name}.md" || return 1
+    fi
     names="${names:+${names}, }${name}"
   done
   echo "agy: always-on rules: ${names:-none}"
@@ -419,7 +380,7 @@ fi
 # signals: bash as PID 1 ignores SIGTERM and SIGHUP, which made `podman stop`
 # wait out its timeout and left the container running when its terminal closed.
 case "$SANDBOX_AGENT" in
-  claude) claude "$@" ;;
+  claude) claude "${CLAUDE_PLUGIN_ARGS[@]}" "$@" ;;
   agy)    exec agy "$@" ;;
   shell)  bash ;;
   *)      echo "start_script: unknown SANDBOX_AGENT '${SANDBOX_AGENT}' (claude, agy or shell)" >&2

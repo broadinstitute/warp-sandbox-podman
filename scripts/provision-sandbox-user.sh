@@ -41,10 +41,12 @@ fatal() { echo "  ${RED}FAIL${RST}    $*"; FAIL=1; }
 
 # refresh_shared_claude SRC DST
 # Re-copy the files the CHECKOUT owns into an ALREADY-provisioned user's
-# shared/.claude, leaving their OAuth token and session state untouched. This is
-# what lets a re-run of this script pick up a plugin bump: the initial `cp -a`
-# below only fires once, so without this an existing user is pinned forever to
-# whatever plugin versions shipped the day they were first provisioned.
+# shared/.claude, leaving their OAuth token and session state untouched. The
+# initial `cp -a` below only fires once, so without this an existing user would
+# keep the settings, hooks and skills of the day they were first provisioned.
+# Plugins are not among them: caveman and ponytail come from the image (the
+# newest release at each build) and Claude loads them with --plugin-dir, so
+# there is no per-user copy to refresh.
 #
 # Design is default-DENY: we copy an explicit allowlist of repo-owned paths — the
 # same set the top-level .gitignore un-ignores under claude-sandbox-shared/ —
@@ -52,58 +54,24 @@ fatal() { echo "  ${RED}FAIL${RST}    $*"; FAIL=1; }
 # "a repo file failed to propagate" (visible, harmless), never "the user's token
 # got clobbered" (silent, unrecoverable).
 refresh_shared_claude() {
-    local src="$1" dst="$2" p mp name ip reset=0 names=()
+    local src="$1" dst="$2" p
 
     # Plain files and whole directories the repo is the source of truth for.
     # Each is replaced only when it differs, so a re-run with nothing new is a
     # true no-op. rm-then-cp (not cp -f) so a file DELETED upstream — a hook or
     # skill dropped in a bump — also disappears from the user's copy.
-    for p in CLAUDE.md PLUGIN_PINS.md settings.json hooks skills; do
+    for p in CLAUDE.md settings.json hooks skills; do
         [[ -e "${src}/${p}" ]] || continue
         diff -rq "${src}/${p}" "${dst}/${p}" >/dev/null 2>&1 && continue
         rm -rf "${dst:?}/${p}"
         cp -a "${src}/${p}" "${dst}/${p}"
     done
+    # The pin ledger of the plugins the repo used to vendor, gone from the repo.
+    rm -f "${dst}/PLUGIN_PINS.md"
     # .caveman-active is caveman's on/off switch, which the plugin itself writes.
     # Seed it once; refreshing it would undo a user turning caveman off.
     [[ -e "${dst}/.caveman-active" || ! -e "${src}/.caveman-active" ]] \
         || cp -a "${src}/.caveman-active" "${dst}/.caveman-active"
-
-    # Vendored plugin marketplaces: refresh ONLY the ones the repo vendors
-    # (caveman, ponytail), by name, and only when the tree changed — a plugin
-    # bump. Never rm the whole marketplaces/ dir: it also holds
-    # claude-plugins-official, which claude-code manages itself.
-    for mp in "${src}/plugins/marketplaces"/*/; do
-        [[ -d "$mp" ]] || continue
-        name="$(basename "$mp")"
-        names+=("$name")
-        diff -rq "$mp" "${dst}/plugins/marketplaces/${name}" >/dev/null 2>&1 && continue
-        rm -rf "${dst}/plugins/marketplaces/${name}"
-        mkdir -p "${dst}/plugins/marketplaces"
-        cp -a "$mp" "${dst}/plugins/marketplaces/${name}"
-        reset=1
-    done
-
-    # Self-heal: an install record whose directory is gone. Claude Code does not
-    # reinstall in that state; every hook fails with "Plugin directory does not
-    # exist ... run /plugin to reinstall". An earlier version of this function
-    # caused it by wiping the plugin cache on every run, under live sessions.
-    while IFS= read -r ip; do
-        [[ -d "${dst}${ip#/home/claude/.claude}" ]] || reset=1
-    done < <(grep -o '"installPath": *"[^"]*"' "${dst}/plugins/installed_plugins.json" 2>/dev/null \
-             | sed 's/.*"\([^"]*\)"$/\1/')
-
-    # Reset = the state a brand-new user starts in (vendored trees, no cache, no
-    # ledgers), which claude-code turns into installed plugins on launch. The
-    # ledgers go too, so a stale `ref` recorded in them cannot trigger a
-    # re-fetch that overwrites the vendored tree.
-    if (( reset )); then
-        for name in "${names[@]}"; do
-            rm -rf "${dst}/plugins/cache/${name}" "${dst}/plugins/data/${name}-${name}"
-        done
-        rm -f "${dst}/plugins/known_marketplaces.json" "${dst}/plugins/installed_plugins.json"
-        ok "plugins reset — Claude Code reinstalls them on your next launch"
-    fi
 
     ok "refreshed repo-owned files in shared/.claude"
     ok "  (only what changed — OAuth token and history left intact)"
@@ -238,14 +206,14 @@ else
 fi
 
 # Seed the shared-state dir from the repo so this user gets working hooks,
-# settings and the vendored plugins. Copied, not symlinked: the container mounts
+# settings and skills. Copied, not symlinked: the container mounts
 # it read-write, and users must not write into a shared checkout.
 if [[ ! -e "${USER_ROOT}/shared/.claude" ]]; then
     cp -a "${REPO_ROOT}/claude-sandbox-shared/.claude" "${USER_ROOT}/shared/.claude"
     ok "seeded ${USER_ROOT}/shared/.claude from the checkout"
 else
-    # Already provisioned: the cp -a above never re-runs, so a plugin bump, hook
-    # fix or settings change committed to the checkout would otherwise never reach
+    # Already provisioned: the cp -a above never re-runs, so a hook fix, skill
+    # or settings change committed to the checkout would otherwise never reach
     # this user. Re-sync the repo-owned files in place; token and history stay put.
     ok "shared state already present — refreshing repo-owned files"
     refresh_shared_claude "${REPO_ROOT}/claude-sandbox-shared/.claude" \

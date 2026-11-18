@@ -45,7 +45,7 @@ export CLAUDE_SANDBOX_INSTANCE=__USER__
 # Per-instance write-hot state: cache, history, projects, .claude.json.
 export CLAUDE_SANDBOX_HOME=__USER_ROOT__/state
 
-# Settings, hooks, skills, vendored plugins, and the Claude OAuth token. Seeded
+# Settings, hooks, skills, and the Claude OAuth token. Seeded
 # from the checkout by provision-sandbox-user.sh. Per-user on purpose: this is
 # mounted read-write, and it holds your token.
 export CLAUDE_SANDBOX_USE_SHARED=1
@@ -121,8 +121,8 @@ export CODEGRAPH=1
 export HEADROOM=1
 
 # Claude Code's auto-updater cannot succeed here (npm global is root-owned and
-# the container is --rm), and its warning is noise. Upgrade by bumping
-# CLAUDE_CODE_VERSION in docker/Dockerfile and rebuilding.
+# the container is --rm), and its warning is noise. Claude Code moves with the
+# image instead: every rebuild installs the newest release.
 #export DISABLE_AUTOUPDATER=0
 
 # Email notifications are not configured on the VM (no MTA). The notify hooks

@@ -10,10 +10,11 @@
 # plugin, not just caveman.
 #
 # Adding a new plugin badge: append the plugin name to STATUSLINE_PLUGINS
-# below. The wrapper discovers <name>-statusline.sh under any of the
-# canonical locations Claude Code's plugin loader may use:
-#   plugins/marketplaces/<name>/{,src/}hooks/<name>-statusline.sh
+# below. The wrapper discovers <name>-statusline.sh in the image's copy of the
+# plugin first (/opt/sandbox/plugins/<name>, what the sandbox loads), then
+# under the locations Claude Code's own plugin installer uses:
 #   plugins/cache/<name>/<name>/*/{,src/}hooks/<name>-statusline.sh
+#   plugins/marketplaces/<name>/{,src/}hooks/<name>-statusline.sh
 # A missing badge is silently skipped — better no output than a hard
 # error.
 #
@@ -64,6 +65,8 @@ PLUGIN_ROOT="${CLAUDE_CONFIG_DIR:-$HOME/.claude}/plugins"
 
 for plugin in "${STATUSLINE_PLUGINS[@]}"; do
     for candidate in \
+        /opt/sandbox/plugins/"$plugin"/src/hooks/"$plugin"-statusline.sh \
+        /opt/sandbox/plugins/"$plugin"/hooks/"$plugin"-statusline.sh \
         "$PLUGIN_ROOT"/cache/"$plugin"/"$plugin"/*/src/hooks/"$plugin"-statusline.sh \
         "$PLUGIN_ROOT"/cache/"$plugin"/"$plugin"/*/hooks/"$plugin"-statusline.sh \
         "$PLUGIN_ROOT"/marketplaces/"$plugin"/src/hooks/"$plugin"-statusline.sh \

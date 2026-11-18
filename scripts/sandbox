@@ -184,7 +184,9 @@ status() {
     line=$(podman image inspect localhost/claude-sandbox:latest \
              --format '{{range .Config.Env}}{{println .}}{{end}}' 2>/dev/null \
            | awk -F= '$1=="CLAUDE_CODE_VERSION"{c=$2} $1=="AGY_VERSION"{a=$2} $1=="CODEGRAPH_VERSION"{g=$2}
-                      END{if (c) printf "claude %s, agy %s, codegraph %s", c, a, g}' || true)
+                      $1=="CAVEMAN_VERSION"{cv=$2} $1=="PONYTAIL_VERSION"{pv=$2}
+                      END{if (c) printf "claude %s, agy %s, codegraph %s", c, a, g
+                          if (cv) printf "; caveman %s, ponytail %s", cv, pv}' || true)
     if [[ -n "$line" ]]; then
         echo "  image       ${line}"
     else

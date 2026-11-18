@@ -166,22 +166,40 @@ minus the metadata step.
 
 ## Updating the image
 
-```bash
-# laptop: bump the pins, review, test, commit, push
-./scripts/bump-versions.sh            # what is newer
-./scripts/bump-versions.sh --apply    # rewrite docker/Dockerfile
-git diff; git commit -am "bump sandbox tools"; git push
+Every build takes the newest Claude Code, Antigravity CLI, caveman and ponytail:
+`scripts/resolve-latest.sh` looks them up, and the build prints what it got. So
+updating those is a rebuild on the host, with nothing to commit:
 
-# host
+```bash
 ssh admin@<ip>
 cd /mnt/sandbox/repo && git pull && chmod -R a+rX .
-sudo ./scripts/build-shared-image.sh          # or under systemd-run as above; a
-                                              # cached rebuild takes about a minute
+sudo ./scripts/build-shared-image.sh          # or under systemd-run as above
 sudo ./scripts/build-shared-image.sh --prune  # reclaim the old image, ~9 GB
 ```
 
+To keep one of them back for a build, because a new release misbehaves, name the
+version; the rest still come out newest:
+
+```bash
+sudo CLAUDE_CODE_VERSION=2.1.326 ./scripts/build-shared-image.sh
+sudo CAVEMAN_VERSION=v4.0.0 PONYTAIL_VERSION=v5.3.0 ./scripts/build-shared-image.sh
+```
+
+Under `systemd-run`, pass them with `-E`, e.g. `-E CLAUDE_CODE_VERSION=2.1.326`.
+agy takes `AGY_VERSION`, `AGY_URL` and `AGY_SHA512` together; the header of
+`scripts/resolve-latest.sh` lists all of them.
+
+codegraph, uv and headroom stay pinned in `docker/Dockerfile`. Move them from a
+checkout on your laptop, then rebuild as above:
+
+```bash
+./scripts/bump-versions.sh            # what is newer
+./scripts/bump-versions.sh --apply    # rewrite docker/Dockerfile
+git diff; git commit -am "bump sandbox tools"; git push
+```
+
 Users get the new image on their next launch, with no action of their own. A
-change to `claude-sandbox-shared/` (settings, hooks, plugins) also needs each user
+change to `claude-sandbox-shared/` (settings, hooks, skills) also needs each user
 to run `sandbox update`, with no sandbox running.
 
 ## Changing the instance type

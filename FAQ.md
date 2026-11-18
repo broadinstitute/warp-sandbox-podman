@@ -137,11 +137,11 @@ rebuild; users only need to relaunch.
 
 ### `Can't auto-update: npm global folder isn't writable`
 
-Expected, and harmless. Claude Code is pinned in the image
-(`CLAUDE_CODE_VERSION`) so that every user of a shared store runs the same
-version, and the launcher sets `DISABLE_AUTOUPDATER=1`. To move versions, bump
-that variable and rebuild — an in-place self-update would make the image
-non-reproducible and would be lost on the next container exit anyway.
+Expected, and harmless. Claude Code updates with the image, not by itself: every
+image build installs the newest release, so every user of a shared store runs the
+same version, and the launcher sets `DISABLE_AUTOUPDATER=1`. An in-place
+self-update would be lost on the next container exit anyway. For a newer version,
+ask the admin to rebuild; `sandbox status` shows the one you have.
 
 ### My SSH dropped: how do I reconnect to the session?
 
@@ -499,10 +499,28 @@ Artifact Review in `/config`.
 
 ### Is agy's version up to date? Can it update itself?
 
-Not by itself, deliberately. It is pinned in the image, and its self-updater skips
-because it cannot write `/usr/local/bin`. `sandbox status` shows the version; the
-admin moves it with `scripts/bump-versions.sh` and a rebuild
+It is the newest release as of the last image build, and it does not update
+itself in between: its self-updater skips because it cannot write `/usr/local/bin`.
+`sandbox status` shows the version. A rebuild brings the newest one
 ([AWS.md](AWS.md#updating-the-image)).
+
+### caveman or ponytail does not seem to be on
+
+In Claude, the launch output should include a line like
+`plugins: caveman 4.1.0, ponytail 5.3.3 (from the image)`, and the status line
+`[CAVEMAN]` and `[PONYTAIL]`. Inside a session, `/caveman status` and `/ponytail`
+report the level; either may simply have been turned off for that session
+("stop caveman", `/ponytail off`), and the next launch starts both again.
+
+Before 2026-11-18 the plugins were installed into each user's own Claude state
+from pinned marketplace copies, and that install could silently not happen:
+`~/.claude/plugins/installed_plugins.json` stayed empty and neither plugin's hooks
+ran. They now load from the image on every launch (`claude --plugin-dir`), so
+there is no per-user install left to fail. If the `plugins:` line says `none`, the
+image is older than that or broken; tell the admin.
+
+In Antigravity, look for `agy: always-on rules: caveman, ponytail` in the launch
+output. agy has no `/caveman` or `/ponytail` commands; ask in words.
 
 ## The shared VM
 

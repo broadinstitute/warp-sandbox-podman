@@ -63,6 +63,22 @@ fi
 echo "Building claude-sandbox:${TAG_VERSION} into shared store ${STORE}"
 echo
 
+# The newest Claude Code, agy, caveman and ponytail, resolved now. To hold one
+# back, set it first, e.g. `sudo CLAUDE_CODE_VERSION=2.1.326 ./scripts/build-shared-image.sh`
+# (resolve-latest.sh lists the variables). If anything cannot be resolved, stop
+# here: the image in use stays as it is.
+if ! latest="$("${SCRIPT_DIR}/resolve-latest.sh")"; then
+    echo "build-shared-image.sh: could not resolve the newest versions; nothing built." >&2
+    exit 1
+fi
+BUILD_ARGS=()
+echo "Newest versions, going into this build:"
+while IFS= read -r kv; do
+    BUILD_ARGS+=(--build-arg "$kv")
+    [[ "$kv" == *_VERSION=* ]] && printf '  %-20s %s\n' "${kv%%=*}" "${kv#*=}"
+done <<<"$latest"
+echo
+
 mkdir -p "$STORE"
 
 # --root redirects the whole storage tree, so this build never touches the
@@ -70,6 +86,7 @@ mkdir -p "$STORE"
 podman --root "$STORE" build \
     -t "claude-sandbox:${TAG_VERSION}" \
     -t "claude-sandbox:latest" \
+    "${BUILD_ARGS[@]}" \
     "${REPO_ROOT}/docker"
 
 # Readable and traversable by every user. Layer contents are root-owned; users
@@ -83,14 +100,14 @@ echo "=== store contents ==="
 podman --root "$STORE" images --format "  {{.Repository}}:{{.Tag}}  {{.Size}}"
 echo
 du -sh "$STORE" | sed 's/^/  store size: /'
-# The pins baked into this build. Read from image metadata, not by running a
+# The versions baked into this build. Read from image metadata, not by running a
 # container: a rootful run would write container state into the shared store.
 # (Each tool's --version already ran inside its own build step.)
 echo
 echo "=== tool versions ==="
 podman --root "$STORE" image inspect "claude-sandbox:${TAG_VERSION}" \
     --format '{{range .Config.Env}}{{println .}}{{end}}' \
-  | awk -F= '$1 ~ /^(CLAUDE_CODE|AGY|CODEGRAPH)_VERSION$/ {printf "  %-22s %s\n", $1, $2}'
+  | awk -F= '$1 ~ /^(CLAUDE_CODE|AGY|CODEGRAPH|CAVEMAN|PONYTAIL)_VERSION$/ {printf "  %-22s %s\n", $1, $2}'
 
 cat <<EOF
 

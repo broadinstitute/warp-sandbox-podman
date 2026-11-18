@@ -23,23 +23,11 @@ claude-sandbox-shared/.claude/*
 !claude-sandbox-shared/.claude/CLAUDE.md
 !claude-sandbox-shared/.claude/settings.json
 !claude-sandbox-shared/.claude/.caveman-active
-!claude-sandbox-shared/.claude/PLUGIN_PINS.md
 !claude-sandbox-shared/.claude/skills/
 !claude-sandbox-shared/.claude/skills/**
-# Vendor the caveman plugin source so a fresh clone has it without
-# network round-trips to JuliusBrussee/caveman at first session. Pinned
-# at v2.7.0 (commit 8b0c1d36...) — bump by replacing the tree in place
-# and updating PLUGIN_PINS.md. The plugins/cache/ dir stays gitignored;
-# claude-code rebuilds it from the vendored marketplaces tree on first
-# session.
-!claude-sandbox-shared/.claude/plugins/
-!claude-sandbox-shared/.claude/plugins/marketplaces/
-!claude-sandbox-shared/.claude/plugins/marketplaces/caveman/
-!claude-sandbox-shared/.claude/plugins/marketplaces/caveman/**
-# Vendor ponytail same way — pinned at v4.9.0 (commit 0a4dd63a...).
-# See PLUGIN_PINS.md for bump procedure.
-!claude-sandbox-shared/.claude/plugins/marketplaces/ponytail/
-!claude-sandbox-shared/.claude/plugins/marketplaces/ponytail/**
+# No plugins here: caveman and ponytail are downloaded into the image at their
+# newest release on every build (docker/Dockerfile), so the plugins/ dir under
+# claude-sandbox-shared/.claude is runtime state only, ignored like the rest.
 
 
 workspace/*
@@ -98,24 +86,6 @@ SESSION_ARCHIVE/CLASSIFIED.md
 # The venv is not relocatable (absolute paths in pyvenv.cfg and bin/ shebangs).
 host_fiss_mcp/venv/
 host_fiss_mcp/fiss-mcp/
-
-# Plugin runtime state. Line 23 above states the intent -- "The plugins/cache/
-# dir stays gitignored; claude-code rebuilds it from the vendored marketplaces
-# tree on first session" -- but no rule ever implemented it. The `!.../plugins/`
-# negation un-ignores the directory, and `claude-sandbox-shared/.claude/*`
-# cannot match across a `/`, so nothing excluded the subtree and a `git add -A`
-# swept 299 derived files in. These rules come last, so they win.
-#
-# Verified regenerable: with only plugins/marketplaces/ present, both pin
-# checks pass (pin-check caveman/ponytail: OK at <sha>) and startup is clean.
-#
-# .in_use/<pid> are per-process lockfiles -- committing them freezes one
-# container run PIDs into git, where they are stale on arrival.
-claude-sandbox-shared/.claude/plugins/cache/
-claude-sandbox-shared/.claude/plugins/data/
-claude-sandbox-shared/.claude/plugins/installed_plugins.json
-claude-sandbox-shared/.claude/plugins/known_marketplaces.json
-claude-sandbox-shared/.claude/plugins/.last_inuse_sweep
 
 # Full-resolution logo master. The committed assets/seal_sandbox.png is a
 # 1200px build of it (2x the README display width, crisp on HiDPI). Keeping the

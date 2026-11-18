@@ -4,6 +4,7 @@
 - [In-container root: works locally, not on a shared store](#in-container-root-works-locally-not-on-a-shared-store)
 - [fiss-mcp (Terra) — runs on the host](#fiss-mcp-terra--runs-on-the-host)
 - [CodeGraph MCP — runs in the container](#codegraph-mcp--runs-in-the-container)
+- [caveman and ponytail](#caveman-and-ponytail)
 - [Antigravity CLI (agy): the second agent](#antigravity-cli-agy-the-second-agent)
 - [Headroom proxy](#headroom-proxy)
 - [Vertex AI mode (inherited, unverified)](#vertex-ai-mode-inherited-unverified)
@@ -16,12 +17,22 @@ names are required: podman on RHEL-family hosts sets
 `short-name-mode="enforcing"`, so a bare `node:22-slim` makes a non-interactive
 build hang and then fail.
 
-- **Claude Code CLI** — `claude`, pinned via `CLAUDE_CODE_VERSION` (the npm
-  `stable` tag at the last bump). The launcher sets `DISABLE_AUTOUPDATER=1`: on a
-  shared store every user must run the same version, and a self-update would be
-  lost at container exit anyway.
-- **Antigravity CLI** — `agy`, Google's terminal agent, pinned by URL and sha512.
-  See [its section](#antigravity-cli-agy-the-second-agent).
+**Newest at every build:** Claude Code, agy, caveman and ponytail.
+`scripts/resolve-latest.sh` looks up the newest release of each and the build
+installs it, so a rebuild is how they update; the image records what it got, and
+`sandbox status` shows it. Everything else below is pinned in the Dockerfile and
+moved with `scripts/bump-versions.sh`.
+
+- **Claude Code CLI** — `claude`, the newest npm release as of the build
+  (`CLAUDE_CODE_VERSION` records which). The launcher sets `DISABLE_AUTOUPDATER=1`:
+  on a shared store every user must run the same version, and a self-update would
+  be lost at container exit anyway.
+- **Antigravity CLI** — `agy`, Google's terminal agent, the newest release as of the
+  build, checked against the sha512 in Google's manifest. See
+  [its section](#antigravity-cli-agy-the-second-agent).
+- **caveman and ponytail** — the sandbox's two plugins, in `/opt/sandbox/plugins`,
+  the newest GitHub release of each as of the build. See
+  [their section](#caveman-and-ponytail).
 - **Python** — venv at `/opt/claude-venv`, on `PATH`, preloaded with `numpy`,
   `pandas`, `matplotlib`, `scipy`, `scikit-learn`, `seaborn`, `ipython`,
   `jupyter`, `requests`, `anndata` (with `h5py`), `scanpy[leiden]`
@@ -259,12 +270,11 @@ resource limits and the host-side fiss-mcp are the same, so everything in the
 isolation model holds unchanged. The two can run at once: the containers are named
 `claude-sandbox-<instance>` and `claude-sandbox-<instance>-agy`.
 
-### Pinned, and kept pinned
+### Newest at each build, fixed in between
 
-`AGY_VERSION`, `AGY_URL` and `AGY_SHA512` in the Dockerfile are copied from Google's
-release manifest, the same file the official `install.sh` reads, and the build
-checks the sha512. `scripts/bump-versions.sh` rewrites all three from the current
-manifest.
+`scripts/resolve-latest.sh` reads Google's release manifest, the same file the
+official `install.sh` reads, and passes its version, URL and sha512 to the build,
+which checks the sha512. Each rebuild therefore installs the newest release.
 
 agy updates itself in the background, but only when it can write the directory its
 binary is in. In the image that is `/usr/local/bin`, which the container user cannot
@@ -339,9 +349,10 @@ application-default credentials inside the container.
 - **caveman and ponytail**: written as always-on rules,
   `~/.gemini/config/rules/sandbox-caveman.md` and `sandbox-ponytail.md`. Each is the
   plugin's own text for agents without hooks (caveman's
-  `src/rules/caveman-activate.md`, ponytail's `.agents/rules/ponytail.md`), copied
-  verbatim into `docker/agy/rules/`, plus the `trigger: always_on` frontmatter
-  without which agy silently drops a rule file. agy installs neither plugin and runs
+  `src/rules/caveman-activate.md`, ponytail's `.agents/rules/ponytail.md`), read
+  from the image's copy of the plugin, plus the `trigger: always_on` frontmatter
+  without which agy silently drops a rule file. A release that moved its file is
+  skipped with a warning. agy installs neither plugin and runs
   neither one's hooks, so the `/caveman` and `/ponytail` commands are Claude-only;
   "stop caveman", "stop ponytail" and "normal mode" work as plain requests. The
   caveman text is the short one (caveman's full ruleset, which Claude gets, is
@@ -352,7 +363,7 @@ application-default credentials inside the container.
   writing its config file, so a format change between releases cannot break them.
   `FISS_MCP=0` / `CODEGRAPH=0` remove them.
 - **Skipped**: Headroom and the Vertex routing (Anthropic traffic only), the Claude
-  plugin pin checks, and `~/.claude.json`.
+  plugins, and `~/.claude.json`.
 
 ### Limits
 
@@ -362,6 +373,42 @@ application-default credentials inside the container.
   the boundary, and has not been tested inside it.
 - Remote Control (`agy --remote-control`) relays through Google's service. It is
   not configured, and is off unless you start it.
+
+## caveman and ponytail
+
+Two third-party plugins, on for every user in both agents:
+[caveman](https://github.com/JuliusBrussee/caveman) (short replies; it changes only
+how the agent talks) and [ponytail](https://github.com/DietrichGebert/ponytail)
+(the least code that works; it changes only what the agent builds). For users:
+[USER-SETUP.md](USER-SETUP.md#caveman-and-ponytail).
+
+**Where they come from.** Every image build downloads the newest GitHub release of
+each into `/opt/sandbox/plugins/<name>`. `scripts/resolve-latest.sh` resolves the
+release tag to its commit, and the Dockerfile fetches that commit. The image records
+both as `CAVEMAN_VERSION` and `PONYTAIL_VERSION`, which `sandbox status` shows.
+
+**How Claude loads them.** `start_script.sh` adds `--plugin-dir
+/opt/sandbox/plugins/<name>` for each to the `claude` command line. Claude Code
+lists them as session-only plugins (`caveman@inline`, `ponytail@inline`) and runs
+their hooks as usual: each one's SessionStart hook switches its mode on, and
+ponytail's adds its band above the prompt. Nothing is installed into a user's own
+`~/.claude`, so nothing there can go stale or half-install. That is what went wrong
+before 2026-11-18, when each user's Claude installed them from pinned marketplace
+copies: on the AWS host that install silently did not happen
+(`installed_plugins.json` stayed empty and neither plugin loaded). A `--plugin-dir`
+plugin also overrides an installed marketplace plugin of the same name, so an older
+user `settings.json` that still enables `caveman@caveman` does no harm.
+
+**How agy gets them.** As always-on rules rather than plugins: see
+[What start_script.sh does on every agy launch](#what-start_scriptsh-does-on-every-agy-launch).
+
+**When a release misbehaves.** Hold it out of the next build with
+`CAVEMAN_VERSION=<tag>` or `PONYTAIL_VERSION=<tag>`
+([AWS.md](AWS.md#updating-the-image)). Plugin hooks run in every session as the
+container user, where the user's Claude token is readable too, so look at what a
+new major release's hooks do before rebuilding with it. caveman 4.1.0 and ponytail
+5.3.3 were read before they first shipped here: their hooks make no network calls,
+except ponytail's optional webhook, which is empty unless a user configures it.
 
 ## Headroom proxy
 
@@ -434,9 +481,10 @@ Claude-specific — it is all engine-level and holds for any process: rootless
 podman user namespace, `--userns=keep-id`, explicit bind mounts as the only way in
 or out, cgroup v2 ceilings, and no credentials in the image.
 
-What is agent-specific is the tooling on top: the pinned install, the MCP wiring
+What is agent-specific is the tooling on top: the install, the MCP wiring
 and settings in `docker/start_script.sh`, and the state directories the launcher
-mounts. To add one: install it pinned in the Dockerfile (somewhere the container
+mounts. To add one: install it in the Dockerfile (pinned, or resolved newest like
+Claude Code and agy in `scripts/resolve-latest.sh`; somewhere the container
 user cannot write, if it self-updates), add a `SANDBOX_AGENT` value to the launcher
 with its own state mounts and container-name suffix, add its setup and entrypoint
 to `start_script.sh`, and a subcommand to `scripts/sandbox`. The mount layout for

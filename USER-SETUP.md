@@ -6,6 +6,7 @@ it comes down to three commands: `ssh` in, `sandbox setup` once, then
 
 - [Quick start](#quick-start)
 - [Everyday use](#everyday-use)
+- [caveman and ponytail](#caveman-and-ponytail): what they do, levels, turning them off
 - [Antigravity sign-in: read this before your first `sandbox agy`](#antigravity-sign-in)
 - [Per-user setup, step by step](#per-user-setup-step-by-step) (what `sandbox setup` does)
 - [Adding files](#adding-files-that-are-not-repos), [repos](#adding-more-repos),
@@ -90,10 +91,53 @@ Antigravity can run at the same time, against the same workspace. Set
 (`bypassPermissions`) and Antigravity (Tool Permission `always-proceed`) edit files
 and run commands without prompting. The sandbox's deny rules still hold, such as no
 `git push`. To get Antigravity's prompts back, choose `request-review` under
-`/config` → Tool Permission; that choice stays. caveman (short replies) and ponytail
-(least code that works) are on in both. Say "stop caveman", "stop ponytail" or
-"normal mode" to drop them for a session. The `/caveman` and `/ponytail` commands
-exist only in Claude.
+`/config` → Tool Permission; that choice stays.
+
+## caveman and ponytail
+
+Two add-ons are on for everyone, in both agents:
+
+- **caveman** makes replies short: fragments, no filler, with code, commands and
+  error messages kept exact. It only changes how the agent talks.
+- **ponytail** makes the agent write the least code that works: reuse what the
+  repo has, standard library first, nothing you did not ask for. It only changes
+  what the agent builds.
+
+Both come from the image at their newest release, updated every time the admin
+rebuilds it; `sandbox status` shows which versions you have. Both start at their
+`full` level.
+
+### In Claude Code
+
+They are full plugins. Each launch prints `plugins: caveman <version>, ponytail
+<version> (from the image)`, and the status line shows `[CAVEMAN]` and `[PONYTAIL]`
+while they are on (`[CAVEMAN:ULTRA]` and so on at another level).
+
+| | caveman | ponytail |
+|---|---|---|
+| Is it on, at what level | `/caveman status` | `/ponytail` |
+| Change the level | `/caveman lite`, `/caveman full`, `/caveman ultra` | `/ponytail lite`, `/ponytail full`, `/ponytail ultra` |
+| Off for this session | `/caveman off`, or say "stop caveman" | `/ponytail off`, or say "stop ponytail" |
+| Extras | `/caveman-commit` (one-line commit message), `/caveman-review` (one finding per line), `/caveman-compress <file>`, `/caveman-stats`, `/caveman-help` | `/ponytail-review` (review the current diff), `/ponytail-audit` (the whole repo), `/ponytail-debt`, `/ponytail-help` |
+
+"Off" lasts for the session; the next launch starts both at `full` again.
+
+ponytail also shows a **band** above the prompt: what the current task has cost,
+tokens, agent time, how much existing code it reused, and whether the tests passed
+after the last change. `/ponytail band` hides it, and the same command brings it
+back. Its task board and ledger are kept in the container, so they start empty
+each launch.
+
+caveman's terminal tool, proxy and cloud account (`caveman ...` commands, and the
+`caveman-setup`, `caveman-optimize` family of skills that drive them) are not
+installed here. The voice and the commands above do not need them.
+
+### In Antigravity
+
+agy runs neither plugin. It gets each one's always-on rules instead, so both apply
+from your first message, but there are no `/caveman` or `/ponytail` commands. Ask
+in words instead: "caveman lite", "stop caveman", "stop ponytail", "normal mode".
+Each launch prints `agy: always-on rules: caveman, ponytail`.
 
 **Commit inside, push outside.** The container holds no git credentials, so the
 agent can commit but not push. Review and push from the host:
@@ -404,8 +448,8 @@ is in [CONFIG.md](CONFIG.md#installing-packages).
 
 ## Updating an existing sandbox
 
-When the admin updates the shared checkout (new seed repos, a plugin bump, hook or
-settings fixes, a new fiss-mcp), refresh yours with **no sandbox running**:
+When the admin updates the shared checkout (new seed repos, hook or settings fixes,
+a new fiss-mcp), refresh yours with **no sandbox running**:
 
 ```bash
 sandbox update
@@ -414,12 +458,13 @@ sandbox update
 It re-runs provisioning, which clones newly added repos and re-syncs the checkout's
 Claude config into your `shared/.claude` (your token and history untouched), then
 rebuilds the fiss-mcp venv if its pin moved. It refuses while a sandbox of yours is
-running, because a plugin refresh under a live Claude session breaks it:
-every prompt then fails with `Plugin directory does not exist`. If you already hit
-that error, exit, `sandbox update`, relaunch with `sandbox claude --continue`.
+running, because changing Claude's settings under a live session can break it.
+If you ever see `Plugin directory does not exist`, exit, `sandbox update`, and
+relaunch with `sandbox claude --continue`.
 
-A new **image** (newer Claude Code or agy) needs nothing from you. You get it on
-your next launch after the admin rebuilds.
+A new **image** needs nothing from you. Every admin rebuild brings the newest
+Claude Code, Antigravity, caveman and ponytail, and you get them on your next
+launch; `sandbox status` shows the versions.
 
 The manual equivalent, on an older checkout without `sandbox`:
 

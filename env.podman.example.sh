@@ -47,9 +47,9 @@ export CLAUDE_SANDBOX_SHM_SIZE=2g
 
 # ----------------------------------------------------------------- state ----
 
-# Shared layout: settings, skills, plugins, hooks and the OAuth token come
-# from claude-sandbox-shared/ in the checkout, so the caveman and ponytail
-# marketplaces stay consistent with the SHA pins start_script.sh verifies.
+# Shared layout: settings, skills, hooks and the OAuth token come from
+# claude-sandbox-shared/ in the checkout. (The caveman and ponytail plugins come
+# from the image.)
 export CLAUDE_SANDBOX_USE_SHARED=1
 
 export CLAUDE_SANDBOX_INSTANCE=main
@@ -143,8 +143,8 @@ export CODEGRAPH=1
 # warning is noise on every launch: npm global (/usr/local/lib/node_modules) is
 # root-owned from build time while the container runs as claude, the path is not
 # bind-mounted, and the container runs --rm -- so an update would be discarded
-# on exit and re-downloaded next launch, drifting off the pinned
-# CLAUDE_CODE_VERSION. Upgrade by bumping that pin and re-running make.
+# on exit and re-downloaded next launch, drifting off the image's
+# CLAUDE_CODE_VERSION. Upgrade by re-running make: it installs the newest release.
 #export DISABLE_AUTOUPDATER=0
 
 # Email notifications: intentionally disabled. There is no postfix or MTA on

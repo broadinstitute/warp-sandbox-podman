@@ -184,8 +184,8 @@ claim is verified by probe in
 - **Two agents, one sandbox.** [Claude Code](https://code.claude.com) and Google's
   [Antigravity CLI](https://antigravity.google) share the image, the mounts and the
   Terra tools. Each keeps its own state, and neither container can see the other's
-  sign-in. Both are pinned, so every user runs the same versions.
-  `scripts/bump-versions.sh` moves every pin at once:
+  sign-in. Every image build installs the newest release of both, so every user
+  runs the same versions and a rebuild brings the next ones:
   [COMPONENTS.md](COMPONENTS.md#antigravity-cli-agy-the-second-agent).
 - **One command for users**: `sandbox setup | claude | agy | status | attach |
   update`. Agents run in tmux, so an SSH drop no longer ends a run.
@@ -199,13 +199,12 @@ claim is verified by probe in
   grep+Read chains. Auto-indexes per workdir.
 - **[Headroom](https://github.com/chopratejas/headroom)** prompt-compression proxy,
   off by default.
-- **Two skill plugins, vendored** so a fresh clone needs no network round-trip and
-  every user of a shared image runs identical versions:
-  [caveman](https://github.com/JuliusBrussee/caveman) (prompt compression) and
-  [ponytail](https://github.com/DietrichGebert/ponytail) (writes less code for the
-  same result). Both on by default, both pinned by commit SHA and re-checked at
-  container boot — see [PLUGIN_PINS.md](claude-sandbox-shared/.claude/PLUGIN_PINS.md).
-  Antigravity gets each one's always-on rule text instead of the plugin.
+- **Two plugins, on for everyone**: [caveman](https://github.com/JuliusBrussee/caveman)
+  (short replies) and [ponytail](https://github.com/DietrichGebert/ponytail) (writes
+  less code for the same result). Every image build takes the newest release of
+  each; Claude loads them as plugins and Antigravity gets their always-on rules.
+  [How to use them](USER-SETUP.md#caveman-and-ponytail);
+  [how they are built in](COMPONENTS.md#caveman-and-ponytail).
 - **Email notification** for prompts that outlive a threshold (default 120 s),
   off unless `CLAUDE_NOTIFY_EMAIL` is set.
 - **Resource ceilings** — `--memory`, `--cpus`, `--shm-size`, enforced through

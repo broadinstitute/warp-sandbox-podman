@@ -37,23 +37,6 @@ ENV CARGO_HOME=/usr/local/cargo \
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | \
       sh -s -- -y --no-modify-path --default-toolchain stable
 
-# Install claude code. Pinned — bumping CLAUDE_CODE_VERSION + `make
-# rebuild` lands a newer release deterministically. Tracking "latest"
-# silently here would make every rebuild non-reproducible, and a
-# write-semantics change between unpinned builds is exactly the kind of
-# thing that produced the bind-mounted-credentials persistence bug
-# (see commit ee421d5).
-#
-# The version is normally the npm `stable` dist-tag at the time of the bump, which
-# skips releases with known regressions. A shared host cannot self-update, so it
-# should not sit on the bleeding edge either. Exception, 2026-11-18: 2.1.327
-# (`latest`), because `stable` was still 2.1.311 and Claude Fable 5.2 needs
-# 2.1.321 or later. scripts/bump-versions.sh prints both tags, rewrites this line,
-# and never moves it backwards, so `stable` takes over again once it passes this.
-ENV CLAUDE_CODE_VERSION=2.1.327
-RUN npm install -g "@anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}" \
-    && claude --version
-
 # CodeGraph: pre-indexed code knowledge graph exposed as an MCP stdio server.
 # Bundle ships its own Node runtime — no compile, no extra deps. Claude Code
 # spawns `codegraph serve --mcp` as a subprocess when shared settings.json
@@ -70,38 +53,6 @@ ENV CODEGRAPH_VERSION=v1.6.3
 RUN curl -fsSL "https://raw.githubusercontent.com/colbymchenry/codegraph/${CODEGRAPH_VERSION}/install.sh" \
     | CODEGRAPH_INSTALL_DIR=/opt/codegraph CODEGRAPH_BIN_DIR=/usr/local/bin sh \
     && /usr/local/bin/codegraph --version
-
-# Antigravity CLI (`agy`), Google's terminal agent: the second agent this image
-# runs (SANDBOX_AGENT=agy). A single static binary.
-#
-# Pinned by URL + sha512, both copied from Google's release manifest
-# (https://antigravity-cli-auto-updater-974169037036.us-central1.run.app/manifests/linux_amd64.json,
-# the file the official install.sh reads). scripts/bump-versions.sh reads the
-# manifest and rewrites these three lines.
-#
-# /usr/local/bin is deliberate. agy updates itself in the background, but only
-# when it can write the directory its binary is in; the container user cannot
-# write /usr/local/bin, so the updater skips (measured: "Directory /usr/local/bin
-# is not fully accessible (readable: true, writable: false), skipping update").
-# That keeps every user on the pinned version, the same job DISABLE_AUTOUPDATER
-# does for claude. Install it under $HOME and each user would silently drift, and
-# a 270 MB download would land in their persisted state on every release.
-ENV AGY_VERSION=1.5.11
-ARG AGY_URL=https://storage.googleapis.com/antigravity-public/antigravity-cli/1.5.11-6132547114106880/linux-x64/cli_linux_x64.tar.gz
-ARG AGY_SHA512=dad3c015e8964fcdc1639b13b7152f4cb84cb1bde385707e2bcdf095d6f1831f4f6521199aec499cc052f9e99906b7fdbc52c273df064d5cb7c84b068ba3ce50
-RUN curl -fsSL -o /tmp/agy.tar.gz "${AGY_URL}" \
-    && echo "${AGY_SHA512}  /tmp/agy.tar.gz" | sha512sum -c - \
-    && tar -xzf /tmp/agy.tar.gz -C /tmp antigravity \
-    && install -m 0755 /tmp/antigravity /usr/local/bin/agy \
-    && rm -f /tmp/agy.tar.gz /tmp/antigravity \
-    && agy --version
-
-# The sandbox's defaults for agy: its rules file (the counterpart of
-# claude-sandbox-shared/.claude/CLAUDE.md) and the settings start_script.sh
-# merges into each user's own settings on every agy launch. Read-only here;
-# a user's copy lives in their persisted ~/.gemini.
-COPY agy/ /opt/sandbox/agy/
-RUN chmod -R a+rX /opt/sandbox
 
 # Default UID/GID baked at build. The runtime entrypoint
 # (uid-fixup-entrypoint.sh) remaps these to match the host invoker via
@@ -132,8 +83,7 @@ COPY --from=ghcr.io/astral-sh/uv:0.13.9 /uv /uvx /usr/local/bin/
 # longer inherits whatever python3 the base image happens to ship. That matters:
 # the base is Debian bookworm (python 3.11 today), and a base-image bump could
 # silently move the interpreter under the whole scientific stack. Pinning it
-# here makes the image reproducible in the same way CLAUDE_CODE_VERSION and
-# CODEGRAPH_VERSION already are.
+# here makes the image reproducible in the same way CODEGRAPH_VERSION already is.
 #
 # 3.12 specifically, to match the interpreter host_fiss_mcp/install.sh pins —
 # one Python version across host and container is one less thing to reason about.
@@ -261,6 +211,99 @@ RUN printf '%s\n' \
       'export PATH=/opt/claude-venv/bin:/usr/local/cargo/bin:/opt/java/openjdk/bin:$PATH' \
       > /etc/profile.d/10-claude-toolchain.sh && \
     chmod 644 /etc/profile.d/10-claude-toolchain.sh
+
+################################################################################
+# Newest at every build: caveman, ponytail, agy, Claude Code.
+#
+# scripts/resolve-latest.sh finds the newest release of each, and the build passes
+# them in as build args (scripts/build-shared-image.sh on the shared host, `make`
+# locally), so every rebuild picks up whatever is newest. Each version is also an
+# ENV, which keeps the layer cache honest (a new release rebuilds its layer, an
+# unchanged one is reused) and records in the image what it got: `sandbox status`
+# and build-shared-image.sh print them. They come last, the most often released
+# last, so a new Claude Code rebuilds only its own layer and the small COPYs below.
+#
+# Following the newest used to be avoided on purpose: an unpinned rebuild once
+# changed how Claude Code wrote its credentials (commit ee421d5). What answers
+# that now is that every build prints the versions it resolved, and that any of
+# them can be held back for a build (resolve-latest.sh lists the variables).
+# Building without the args fails at the first RUN below, saying so.
+################################################################################
+
+# caveman and ponytail, the sandbox's two plugins: the newest GitHub release of
+# each, downloaded by the commit the release resolved to. Claude loads them from
+# here on every launch (start_script.sh passes --plugin-dir), so nothing is
+# installed into users' own state; agy gets each one's always-on rule text from
+# here too.
+ARG CAVEMAN_VERSION
+ARG CAVEMAN_COMMIT
+ARG PONYTAIL_VERSION
+ARG PONYTAIL_COMMIT
+ENV CAVEMAN_VERSION=${CAVEMAN_VERSION} CAVEMAN_COMMIT=${CAVEMAN_COMMIT} \
+    PONYTAIL_VERSION=${PONYTAIL_VERSION} PONYTAIL_COMMIT=${PONYTAIL_COMMIT}
+RUN set -eu; \
+    if [ -z "$CAVEMAN_COMMIT" ] || [ -z "$PONYTAIL_COMMIT" ]; then \
+      echo "No plugin versions given. Build with scripts/build-shared-image.sh or" \
+           "make -C docker build, which pass the newest (scripts/resolve-latest.sh)." >&2; \
+      exit 1; \
+    fi; \
+    for p in "caveman JuliusBrussee/caveman $CAVEMAN_COMMIT" \
+             "ponytail DietrichGebert/ponytail $PONYTAIL_COMMIT"; do \
+      set -- $p; mkdir -p "/opt/sandbox/plugins/$1"; \
+      curl -fsSL -o "/tmp/$1.tar.gz" "https://codeload.github.com/$2/tar.gz/$3"; \
+      tar -xzf "/tmp/$1.tar.gz" -C "/opt/sandbox/plugins/$1" --strip-components=1; \
+      rm -f "/tmp/$1.tar.gz"; \
+      test -f "/opt/sandbox/plugins/$1/.claude-plugin/plugin.json"; \
+    done; \
+    chown -R claude:claude /opt/sandbox/plugins; \
+    chmod -R a+rX /opt/sandbox/plugins
+
+# Antigravity CLI (`agy`), Google's terminal agent: the second agent this image
+# runs (SANDBOX_AGENT=agy). A single static binary, the newest in Google's release
+# manifest (the file the official install.sh reads), checked against the sha512
+# the manifest gives.
+#
+# /usr/local/bin is deliberate. agy updates itself in the background, but only
+# when it can write the directory its binary is in; the container user cannot
+# write /usr/local/bin, so the updater skips (measured: "Directory /usr/local/bin
+# is not fully accessible (readable: true, writable: false), skipping update").
+# That keeps every user on the image's version until the next rebuild, the job
+# DISABLE_AUTOUPDATER does for claude. Installed under $HOME, each user would
+# drift on their own, and a 270 MB download would land in their persisted state
+# on every release.
+ARG AGY_VERSION
+ARG AGY_URL
+ARG AGY_SHA512
+ENV AGY_VERSION=${AGY_VERSION}
+RUN set -eu; \
+    if [ -z "$AGY_URL" ] || [ -z "$AGY_SHA512" ]; then \
+      echo "No agy version given; see the note above the plugin step." >&2; exit 1; \
+    fi; \
+    curl -fsSL -o /tmp/agy.tar.gz "${AGY_URL}"; \
+    echo "${AGY_SHA512}  /tmp/agy.tar.gz" | sha512sum -c -; \
+    tar -xzf /tmp/agy.tar.gz -C /tmp antigravity; \
+    install -m 0755 /tmp/antigravity /usr/local/bin/agy; \
+    rm -f /tmp/agy.tar.gz /tmp/antigravity; \
+    agy --version
+
+# Claude Code, the newest npm release (dist-tag `latest`). It does not update
+# itself in the container (the launcher sets DISABLE_AUTOUPDATER); it moves with
+# the image.
+ARG CLAUDE_CODE_VERSION
+ENV CLAUDE_CODE_VERSION=${CLAUDE_CODE_VERSION}
+RUN set -eu; \
+    if [ -z "$CLAUDE_CODE_VERSION" ]; then \
+      echo "No Claude Code version given; see the note above the plugin step." >&2; exit 1; \
+    fi; \
+    npm install -g "@anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}"; \
+    claude --version
+
+# The sandbox's defaults for agy: its rules file (the counterpart of
+# claude-sandbox-shared/.claude/CLAUDE.md) and the settings start_script.sh
+# merges into each user's own settings on every agy launch. Read-only here;
+# a user's copy lives in their persisted ~/.gemini.
+COPY agy/ /opt/sandbox/agy/
+RUN chmod -R a+rX /opt/sandbox/agy
 
 ################################################################################
 

@@ -512,9 +512,11 @@ Edit `docker/Dockerfile` and rebuild:
 - **System packages** — extend the `apt-get install` line.
 - **Java** — change `FROM docker.io/library/eclipse-temurin:17-jdk`.
 - **Rust channel** — change `--default-toolchain stable`.
-- **Claude Code / CodeGraph versions** — bump `CLAUDE_CODE_VERSION` /
-  `CODEGRAPH_VERSION`, then `make rebuild` (plain `make` will not re-fetch a
-  cached layer).
+- **Claude Code, agy, caveman, ponytail** — every `make` installs the newest
+  release of each (`scripts/resolve-latest.sh`). To hold one back, set it first:
+  `CLAUDE_CODE_VERSION=2.1.326 make`.
+- **CodeGraph version** — bump `CODEGRAPH_VERSION` (`scripts/bump-versions.sh
+  --apply` does it), then `make`.
 
 ```bash
 cd docker
