@@ -390,8 +390,10 @@ both as `CAVEMAN_VERSION` and `PONYTAIL_VERSION`, which `sandbox status` shows.
 **How Claude loads them.** `start_script.sh` adds `--plugin-dir
 /opt/sandbox/plugins/<name>` for each to the `claude` command line. Claude Code
 lists them as session-only plugins (`caveman@inline`, `ponytail@inline`) and runs
-their hooks as usual: each one's SessionStart hook switches its mode on, and
-ponytail's adds its band above the prompt. Nothing is installed into a user's own
+their hooks as usual: each one's SessionStart hook switches its mode on (caveman's
+only in interactive sessions: from 4.x it starts headless `claude -p` and SDK runs
+off, since scripts parse that output), and ponytail's adds its band above the
+prompt. Nothing is installed into a user's own
 `~/.claude`, so nothing there can go stale or half-install. That is what went wrong
 before 2026-11-18, when each user's Claude installed them from pinned marketplace
 copies: on the AWS host that install silently did not happen

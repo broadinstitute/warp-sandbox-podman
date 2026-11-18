@@ -509,8 +509,10 @@ itself in between: its self-updater skips because it cannot write `/usr/local/bi
 In Claude, the launch output should include a line like
 `plugins: caveman 4.1.0, ponytail 5.3.3 (from the image)`, and the status line
 `[CAVEMAN]` and `[PONYTAIL]`. Inside a session, `/caveman status` and `/ponytail`
-report the level; either may simply have been turned off for that session
-("stop caveman", `/ponytail off`), and the next launch starts both again.
+report the mode; either may simply have been turned off for that session
+("stop caveman", `/ponytail off`), and the next launch starts both again. In a
+headless `claude -p` run caveman starts off by design (scripts read that output);
+`/caveman` turns it on.
 
 Before 2026-11-18 the plugins were installed into each user's own Claude state
 from pinned marketplace copies, and that install could silently not happen:
