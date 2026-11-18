@@ -199,9 +199,9 @@ if [[ -n "${GEMINI_API_KEY:-}" ]]; then
 elif [[ -n "$(find "${state}/.gemini" "${state}/.config/antigravity" -maxdepth 3 -name '*oauth-token*' -size +0 2>/dev/null | head -1)" ]]; then
     ok "Antigravity: signed in"
 else
-    info "Antigravity: run ${BLD}sandbox agy${RST}. It prints a sign-in URL to open on your laptop and"
-    info "waits for the code. Which Google account to use matters: see USER-SETUP.md,"
-    info "\"Antigravity sign-in\", before you pick one."
+    info "Antigravity: run ${BLD}sandbox agy${RST}, choose Google OAuth, open the URL it prints on your"
+    info "laptop and paste the code back. Use a ${BLD}personal${RST} Google account: Broad has deactivated"
+    info "Antigravity for Broad accounts (USER-SETUP.md, \"Antigravity sign-in\")."
 fi
 
 echo

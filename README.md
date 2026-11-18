@@ -159,10 +159,10 @@ claim is verified by probe in
   only the `admin` account; users get local accounts with no sudo. On a GCE VM
   every metadata-SSH-key user lands in `google-sudoers`. Accepted: co-users are
   trusted people. Agents are not, and they are what the boundary is for.
-- **An Antigravity Google sign-in is a cloud credential.** Its token carries Google
-  Cloud scope and lives in the agy container. Signed in with a Broad account, that
-  agent could act on Google Cloud as the user. Use a Gemini API key or a personal
-  account instead: [USER-SETUP.md](USER-SETUP.md#antigravity-sign-in).
+- **An Antigravity sign-in is a cloud credential.** Its token carries Google Cloud
+  scope and lives in the agy container. Broad has deactivated Antigravity for Broad
+  accounts, so users sign in with a personal Google account, one with no access to
+  Broad cloud resources: [USER-SETUP.md](USER-SETUP.md#antigravity-sign-in).
   If you would rather your *own* agent sessions could not do that either, run them
   from a `useradd` account, which gets no `google-sudoers` and needs no sudo to run
   the sandbox — see

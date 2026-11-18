@@ -462,18 +462,14 @@ ls -la /mnt/sandbox/users/$USER/shared/.gemini/antigravity-cli/   # must be your
 sandbox status                                                    # "Antigravity signed in"?
 ```
 
-If the directory is not yours (an admin copied something in), `chown` it back. If
-you signed in with "Use a Google Cloud project", the project choice is part of the
-saved sign-in; picking a different one signs you in afresh.
+If the directory is not yours (an admin copied something in), `chown` it back.
 
-### My Broad (Workspace) account is refused, or has no plan
+### My Broad account is refused
 
-Google Workspace accounts have no Antigravity plan of their own. Google's docs list
-three ways in: a personal Google account (free, Pro or Ultra), Gemini Enterprise,
-or "Use a Google Cloud project". Before choosing the last with a Broad account,
-read [USER-SETUP.md, Antigravity sign-in](USER-SETUP.md#antigravity-sign-in): that
-token would give the agent your Google Cloud access. A Gemini API key avoids the
-question entirely.
+Broad has deactivated Antigravity for Broad accounts. Sign in with a personal Google
+account instead, one with no access to Broad projects or buckets: type `/logout`
+inside agy, launch again, choose Google OAuth and use the personal account
+([USER-SETUP.md, Antigravity sign-in](USER-SETUP.md#antigravity-sign-in)).
 
 ### agy ignores my `GEMINI_API_KEY`, or refuses to start
 

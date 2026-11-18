@@ -192,7 +192,7 @@ stack locks everyone out.
 
 Debian's cloud image is minimal — nothing container-related ships by default.
 `sudo ./scripts/setup-debian-host.sh` installs all of this, plus `gh` and (off GCE)
-`google-cloud-cli` from their vendors' repositories, and a pinned `uv`. By hand:
+`google-cloud-cli` from their vendors' repositories, and the newest `uv`. By hand:
 
 ```bash
 sudo apt-get update

@@ -40,7 +40,7 @@ before launching. Templates: `env.podman.example.sh` (local),
 | `CLAUDE_SANDBOX_IMAGE_STORE` | `/mnt/sandbox/imagestore` | Shared read-only image store (server deployments). |
 | `CLAUDE_NOTIFY_EMAIL` | unset | Leave unset and the notify hooks no-op; no MTA is configured. |
 | `SANDBOX_AGENT` | `claude` | Which agent the container runs: `claude`, `agy` (Antigravity CLI) or `shell` (bash). `sandbox claude` / `sandbox agy` set it. Non-default agents get their own container name, so they can run alongside Claude. |
-| `GEMINI_API_KEY` | unset | agy only: sign in with a Gemini API key instead of a Google account ([why you might want to](USER-SETUP.md#antigravity-sign-in)). Forwarded by name, into agy containers only. |
+| `GEMINI_API_KEY` | unset | agy only: a Gemini API key (from a personal Google account) used instead of the Google sign-in. Forwarded by name, into agy containers only. |
 | `GOOGLE_GEMINI_BASE_URL` | unset | agy only: a Gemini-compatible endpoint. |
 | `SANDBOX_NO_TMUX` | unset | `sandbox` command only: `1` runs the agent in the foreground instead of in a tmux session. |
 
@@ -512,7 +512,7 @@ Edit `docker/Dockerfile` and rebuild:
 - **System packages** — extend the `apt-get install` line.
 - **Java** — change `FROM docker.io/library/eclipse-temurin:17-jdk`.
 - **Rust channel** — change `--default-toolchain stable`.
-- **Claude Code, agy, caveman, ponytail** — every `make` installs the newest
+- **Claude Code, agy, caveman, ponytail, uv** — every `make` installs the newest
   release of each (`scripts/resolve-latest.sh`). To hold one back, set it first:
   `CLAUDE_CODE_VERSION=2.1.326 make`.
 - **CodeGraph version** — bump `CODEGRAPH_VERSION` (`scripts/bump-versions.sh

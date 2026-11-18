@@ -79,6 +79,12 @@ while IFS= read -r kv; do
 done <<<"$latest"
 echo
 
+# The host's uv (what users' fiss-mcp venvs are built with) follows the image's:
+# the same version, on every build. Not fatal: the image does not depend on it.
+UV_VERSION="$(sed -n 's/^UV_VERSION=//p' <<<"$latest")" "${SCRIPT_DIR}/setup-debian-host.sh" --uv-only \
+    || echo "build-shared-image.sh: warning: could not update the host's uv; building anyway." >&2
+echo
+
 mkdir -p "$STORE"
 
 # --root redirects the whole storage tree, so this build never touches the
@@ -107,7 +113,7 @@ echo
 echo "=== tool versions ==="
 podman --root "$STORE" image inspect "claude-sandbox:${TAG_VERSION}" \
     --format '{{range .Config.Env}}{{println .}}{{end}}' \
-  | awk -F= '$1 ~ /^(CLAUDE_CODE|AGY|CODEGRAPH|CAVEMAN|PONYTAIL)_VERSION$/ {printf "  %-22s %s\n", $1, $2}'
+  | awk -F= '$1 ~ /^(CLAUDE_CODE|AGY|CODEGRAPH|CAVEMAN|PONYTAIL|UV)_VERSION$/ {printf "  %-22s %s\n", $1, $2}'
 
 cat <<EOF
 

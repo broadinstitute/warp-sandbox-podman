@@ -292,7 +292,7 @@ setup_agy() {
   if [[ -n "${GEMINI_API_KEY:-}" ]]; then
     echo "agy: model provider = Gemini API key (GEMINI_API_KEY)"
   else
-    echo "agy: model provider = Google sign-in (first run prints a URL to open on your laptop)"
+    echo "agy: model provider = Google sign-in (first run: choose Google OAuth and sign in with a PERSONAL Google account; Broad accounts are deactivated)"
   fi
   echo "agy: tool permission = $(jq -r '.toolPermission // "request-review"' "$settings" 2>/dev/null || echo unknown)  (change: /config → Tool Permission)"
 

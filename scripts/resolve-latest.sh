@@ -9,6 +9,9 @@
 #                 the Dockerfile checks the download against the sha512)
 #   caveman       newest GitHub release of JuliusBrussee/caveman
 #   ponytail      newest GitHub release of DietrichGebert/ponytail
+#   uv            newest GitHub release of astral-sh/uv (the image copies it from
+#                 Astral's published ghcr.io/astral-sh/uv:<version>; the build
+#                 puts the same version on the host, setup-debian-host.sh --uv-only)
 #
 # The plugin releases resolve to a commit, which is what the image downloads, so
 # the build gets exactly the release that was resolved.
@@ -16,12 +19,13 @@
 # To hold one back for a build, set it in the environment; it is used as given:
 #   CLAUDE_CODE_VERSION=2.1.326                        an npm version
 #   CAVEMAN_VERSION=v4.0.0   PONYTAIL_VERSION=v5.3.0   a release tag
+#   UV_VERSION=0.13.9                                  a uv release
 #   AGY_VERSION + AGY_URL + AGY_SHA512                 all three, from an older manifest
 #
 # Exits non-zero, having printed nothing, if anything cannot be resolved. A build
 # then never starts, and the image in use stays as it is.
 #
-# codegraph, uv and headroom are not here: they stay pinned in docker/Dockerfile
+# codegraph and headroom are not here: they stay pinned in docker/Dockerfile
 # (scripts/bump-versions.sh moves them).
 set -euo pipefail
 
@@ -64,6 +68,13 @@ release() {
     [[ -n "$commit" ]] || die "${repo} has no tag ${tag}"
     echo "$tag $commit"
 }
+uv="${UV_VERSION:-}"
+if [[ -z "$uv" ]]; then
+    uv=$(curl -fsSLI -o /dev/null -w '%{url_effective}' https://github.com/astral-sh/uv/releases/latest \
+         | sed -n 's#.*/releases/tag/##p') || die "could not reach GitHub for uv"
+    [[ -n "$uv" ]] || die "could not find uv's newest release"
+fi
+
 # Assigned, not read from a here-string: die() runs in the $( ) subshell, and only
 # an assignment carries its failure out to set -e.
 cav=$(release JuliusBrussee/caveman "${CAVEMAN_VERSION:-}")
@@ -80,4 +91,5 @@ CAVEMAN_VERSION=${cav_v}
 CAVEMAN_COMMIT=${cav_c}
 PONYTAIL_VERSION=${pon_v}
 PONYTAIL_COMMIT=${pon_c}
+UV_VERSION=${uv}
 EOF

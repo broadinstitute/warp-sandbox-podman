@@ -131,10 +131,10 @@ export HEADROOM=1
 
 # ------------------------------------------------------------ Antigravity ----
 
-# `sandbox agy` runs Google's Antigravity CLI in the same sandbox. By default it
-# signs in with a Google account on its first run. A Gemini API key instead
-# (https://aistudio.google.com/apikey) keeps any Google account sign-in out of the
-# container; USER-SETUP.md, "Antigravity sign-in", explains why that can matter.
-# Forwarded by name, and only into agy containers. This file is in your chmod 700
-# directory, which is what keeps the key from other users.
+# `sandbox agy` runs Google's Antigravity CLI in the same sandbox. It signs in on
+# its first run with your PERSONAL Google account: Broad has deactivated Antigravity
+# for Broad accounts (USER-SETUP.md, "Antigravity sign-in"). Optionally, a Gemini
+# API key from that personal account (https://aistudio.google.com/apikey) replaces
+# the sign-in. Forwarded by name, and only into agy containers. This file is in
+# your chmod 700 directory, which is what keeps the key from other users.
 #export GEMINI_API_KEY=

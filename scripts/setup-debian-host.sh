@@ -24,6 +24,9 @@
 #   --repo-url URL      checkout to clone (default: this project on GitHub)
 #   --repo-owner USER   owner of /mnt/sandbox/repo (default: the sudo invoker)
 #   --no-imds-block     do not install the EC2 metadata-service block (below)
+#   --uv-only           only install or update uv, then stop. Every image build
+#                       runs this (scripts/build-shared-image.sh), with
+#                       UV_VERSION set to the uv it puts in the image.
 set -euo pipefail
 
 DATA_DEVICE=""
@@ -31,9 +34,10 @@ REPO_URL="https://github.com/broadinstitute/warp-sandbox-podman.git"
 REPO_OWNER="${SUDO_USER:-}"
 IMDS_BLOCK=auto
 SANDBOX_ROOT=/mnt/sandbox
-# uv is pinned and checksum-verified. Keep in step with the uv image tag in
-# docker/Dockerfile, so host and container run one uv version.
-UV_VERSION=0.13.9
+# uv: the newest release, checked against the checksum published with it, unless
+# UV_VERSION is set. Each image build sets it to the image's uv, so host and
+# container run one uv version.
+UV_ONLY=0
 
 while (( $# )); do
     case "$1" in
@@ -41,6 +45,7 @@ while (( $# )); do
         --repo-url)      REPO_URL="$2"; shift ;;
         --repo-owner)    REPO_OWNER="$2"; shift ;;
         --no-imds-block) IMDS_BLOCK=no ;;
+        --uv-only)       UV_ONLY=1 ;;
         -h|--help)       sed -n '2,30p' "$0" 2>/dev/null || true; exit 0 ;;
         *) echo "unknown option: $1" >&2; exit 2 ;;
     esac
@@ -51,7 +56,35 @@ say()  { printf '\033[1;32m==>\033[0m %s\n' "$*"; }
 note() { printf '    %s\n' "$*"; }
 die()  { printf '\033[1;31mERROR:\033[0m %s\n' "$*" >&2; exit 1; }
 
+# Debian does not package uv. A checksum-verified binary in /usr/local/bin,
+# rather than every user running `curl | sh`: the newest release, or UV_VERSION.
+install_uv() {
+    local want="${UV_VERSION:-}" tmp base tarball
+    if [[ -z "$want" ]]; then
+        want=$(curl -fsSLI -o /dev/null -w '%{url_effective}' \
+                    https://github.com/astral-sh/uv/releases/latest 2>/dev/null \
+               | sed -n 's#.*/releases/tag/##p' || true)
+    fi
+    if [[ -z "$want" ]]; then
+        command -v uv >/dev/null 2>&1 || die "could not look up the newest uv release"
+        echo "warning: could not look up the newest uv release; keeping $(uv --version)" >&2
+        return 0
+    fi
+    if [[ "$(uv --version 2>/dev/null | awk '{print $2}')" != "$want" ]]; then
+        tmp=$(mktemp -d)
+        base="https://github.com/astral-sh/uv/releases/download/${want}"
+        tarball="uv-$(uname -m)-unknown-linux-gnu.tar.gz"
+        curl -fsSL -o "${tmp}/${tarball}" "${base}/${tarball}"
+        curl -fsSL -o "${tmp}/${tarball}.sha256" "${base}/${tarball}.sha256"
+        (cd "$tmp" && sha256sum -c "${tarball}.sha256" >/dev/null) || die "uv checksum mismatch"
+        tar -xzf "${tmp}/${tarball}" -C /usr/local/bin --strip-components=1 --wildcards '*/uv' '*/uvx'
+        rm -rf "$tmp"
+    fi
+    say "uv $(uv --version | awk '{print $2}')"
+}
+
 [[ "$(id -u)" == 0 ]] || die "run as root (sudo)."
+if (( UV_ONLY )); then install_uv; exit 0; fi
 . /etc/os-release
 [[ "${ID:-}" == debian && "${VERSION_ID:-}" == 13 ]] \
     || echo "warning: written for Debian 13; this is ${PRETTY_NAME:-unknown}. Continuing." >&2
@@ -101,19 +134,7 @@ apt-get install -y -qq "${PKGS[@]}" >/dev/null
 note "podman $(podman --version | awk '{print $3}'), gh $(gh --version | awk 'NR==1{print $3}'), $(gcloud --version 2>/dev/null | head -1)"
 
 # ------------------------------------------------------------------- uv ----
-# Debian does not package uv. A pinned, checksum-verified binary in
-# /usr/local/bin, rather than every user running `curl | sh`.
-if [[ "$(uv --version 2>/dev/null | awk '{print $2}')" != "$UV_VERSION" ]]; then
-    tmp=$(mktemp -d)
-    base="https://github.com/astral-sh/uv/releases/download/${UV_VERSION}"
-    tarball="uv-$(uname -m)-unknown-linux-gnu.tar.gz"
-    curl -fsSL -o "${tmp}/${tarball}" "${base}/${tarball}"
-    curl -fsSL -o "${tmp}/${tarball}.sha256" "${base}/${tarball}.sha256"
-    (cd "$tmp" && sha256sum -c "${tarball}.sha256" >/dev/null) || die "uv checksum mismatch"
-    tar -xzf "${tmp}/${tarball}" -C /usr/local/bin --strip-components=1 --wildcards '*/uv' '*/uvx'
-    rm -rf "$tmp"
-fi
-say "uv $(uv --version | awk '{print $2}')"
+install_uv
 
 # ------------------------------------------------------------ data disk ----
 say "data disk"

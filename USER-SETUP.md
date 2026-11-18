@@ -7,7 +7,7 @@ it comes down to three commands: `ssh` in, `sandbox setup` once, then
 - [Quick start](#quick-start)
 - [Everyday use](#everyday-use)
 - [caveman and ponytail](#caveman-and-ponytail): what they do, levels, turning them off
-- [Antigravity sign-in: read this before your first `sandbox agy`](#antigravity-sign-in)
+- [Antigravity sign-in: personal Google account only](#antigravity-sign-in)
 - [Per-user setup, step by step](#per-user-setup-step-by-step) (what `sandbox setup` does)
 - [Adding files](#adding-files-that-are-not-repos), [repos](#adding-more-repos),
   [packages](#installing-packages-scvi-tools-worked-example)
@@ -60,8 +60,9 @@ Each asks you to sign in the first time only:
 * **Claude Code** shows a login-method picker. Choose the **first option** (Claude
   account with subscription). It prints a URL; open it on your laptop and paste the
   code back. No need to type `/login`.
-* **Antigravity** prints a sign-in URL to open on your laptop and waits for the
-  code. **[Read which account to use](#antigravity-sign-in) before you do this.**
+* **Antigravity** asks how to sign in: choose Google OAuth, open the URL it prints
+  on your laptop and paste the code back. Use a **personal Google account**: Broad
+  has deactivated Antigravity for Broad accounts ([details](#antigravity-sign-in)).
 
 Both tokens are stored in your own state directory on the data disk. Later
 launches go straight in, and they survive a VM rebuild. Your workspace already holds
@@ -154,41 +155,24 @@ mode". Each launch prints `agy: always-on rules: caveman, ponytail`.
 
 ## Antigravity sign-in
 
-Read this before your first `sandbox agy`. Which account you sign in with decides
-what that agent could reach.
+**Sign in with a personal Google account.** Broad has deactivated Antigravity for
+Broad accounts, so a `@broadinstitute.org` sign-in, whether directly or through
+"Use a Google Cloud project", does not work. Any personal Google account does:
+Antigravity's free tier, or Google AI Pro or Ultra.
 
-**Where the sign-in goes.** Claude's token is an Anthropic credential and reaches
-nothing but Claude. Antigravity's Google sign-in is different: like Gemini CLI's,
-its OAuth token carries Google's `cloud-platform` scope. The consent screen says so,
-listing access to your Google Cloud data. That token is stored **inside the agy
-container**, where the agent can read it. Signed in as your Broad Google account,
-the one that has Terra and GCS access, an agent in that container could act on
-Google Cloud as you. Keeping that kind of credential out of the container is what
-this sandbox otherwise guarantees. The Claude container is unaffected: it never
-mounts Antigravity's state, and the agy container never mounts Claude's.
+The first `sandbox agy` asks how to sign in: choose **Google OAuth**, open the URL
+it prints on your laptop, sign in with the personal account, and paste the code
+back. The token is saved in your agy state, so later launches go straight in.
 
-So, in order of preference:
+Pick a personal account with **no access to Broad projects or buckets**.
+Antigravity's sign-in token carries Google's `cloud-platform` scope, the consent
+screen says so, and it is stored inside the agy container, where the agent can read
+it. With an account that has no Broad access, there is nothing of Broad's for that
+token to reach. (The Claude container never mounts Antigravity's state, and the agy
+container never mounts Claude's.)
 
-1. **A Gemini API key.** Grants only the Gemini API. Create one at
-   [aistudio.google.com/apikey](https://aistudio.google.com/apikey) and put it in your
-   env file, which only you can read:
-
-   ```bash
-   echo 'export GEMINI_API_KEY=<key>' >> /mnt/sandbox/users/$USER/env.$USER.sh
-   ```
-
-   The next `sandbox agy` uses it, with no sign-in at all. The launcher forwards it
-   by name only, into agy containers only. Usage is billed to the key's project.
-2. **A personal Google account** (free, Google AI Pro or Ultra) with no access to
-   Broad cloud resources. The token's scope then reaches nothing that matters.
-3. **Your Broad account, through a Google Cloud project** ("Use a Google Cloud
-   project" at the sign-in prompt), only if you accept the exposure above.
-   Workspace accounts such as `@broadinstitute.org` have no Antigravity plan of
-   their own: Google's docs list personal plans, Gemini Enterprise, or a Cloud
-   project as the ways in.
-
-To switch, type `/logout` inside agy (it clears the saved sign-in), then launch
-again. Adding or removing `GEMINI_API_KEY` takes effect on the next launch.
+Signed in with a different account before, or want to switch? Type `/logout`
+inside agy (it clears the saved sign-in), then launch again.
 
 ## Per-user setup, step by step
 

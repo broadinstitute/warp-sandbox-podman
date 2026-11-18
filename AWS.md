@@ -105,7 +105,8 @@ ssh admin@<ip> 'sudo bash -s -- --data-device /dev/disk/by-id/nvme-Amazon_Elasti
 ```
 
 It installs the host packages (SERVER.md's table, plus `google-cloud-cli` and a
-current `gh` from their vendors' apt repositories), a pinned and checksummed `uv`,
+current `gh` from their vendors' apt repositories), the newest `uv` (checked
+against the checksum published with it),
 formats the data volume **only if it is blank**, mounts it by UUID with `nofail`,
 creates `users/` and `plans/` (1777) and `reference/` (755), and clones the
 checkout to `/mnt/sandbox/repo`, owned by `admin`. It also installs
@@ -166,7 +167,8 @@ minus the metadata step.
 
 ## Updating the image
 
-Every build takes the newest Claude Code, Antigravity CLI, caveman and ponytail:
+Every build takes the newest Claude Code, Antigravity CLI, caveman, ponytail and
+uv (the image's, and the host's to match):
 `scripts/resolve-latest.sh` looks them up, and the build prints what it got. So
 updating those is a rebuild on the host, with nothing to commit:
 
@@ -189,7 +191,7 @@ Under `systemd-run`, pass them with `-E`, e.g. `-E CLAUDE_CODE_VERSION=2.1.326`.
 agy takes `AGY_VERSION`, `AGY_URL` and `AGY_SHA512` together; the header of
 `scripts/resolve-latest.sh` lists all of them.
 
-codegraph, uv and headroom stay pinned in `docker/Dockerfile`. Move them from a
+codegraph and headroom stay pinned in `docker/Dockerfile`. Move them from a
 checkout on your laptop, then rebuild as above:
 
 ```bash

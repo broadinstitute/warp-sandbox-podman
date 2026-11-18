@@ -17,10 +17,11 @@ names are required: podman on RHEL-family hosts sets
 `short-name-mode="enforcing"`, so a bare `node:22-slim` makes a non-interactive
 build hang and then fail.
 
-**Newest at every build:** Claude Code, agy, caveman and ponytail.
+**Newest at every build:** Claude Code, agy, caveman, ponytail and uv.
 `scripts/resolve-latest.sh` looks up the newest release of each and the build
 installs it, so a rebuild is how they update; the image records what it got, and
-`sandbox status` shows it. Everything else below is pinned in the Dockerfile and
+`sandbox status` shows the agents and plugins. The build also brings the host's uv
+to the same version. codegraph and headroom are pinned in the Dockerfile and
 moved with `scripts/bump-versions.sh`.
 
 - **Claude Code CLI** — `claude`, the newest npm release as of the build
@@ -304,18 +305,21 @@ session bus detected`. Being a file in the mounted state is what makes it surviv
 relaunches. The first run asks how to sign in and, with no browser available, prints
 a URL to open on your laptop and waits for the code.
 
-| Route | How | What the token can reach |
-|---|---|---|
-| Gemini API key | `GEMINI_API_KEY` in the env file | the Gemini API only |
-| Personal Google account | sign-in prompt | Google Cloud as that person; nothing, for an account with no cloud access |
-| Google Cloud project, e.g. a Broad account | "Use a Google Cloud project" at the prompt | **Google Cloud as that account**, including Terra buckets |
+**Users sign in with a personal Google account** (Google OAuth at the prompt).
+Broad has deactivated Antigravity for Broad accounts, so neither a direct Broad
+sign-in nor "Use a Google Cloud project" with a Broad identity is an option, and
+the user docs offer only the personal route
+([USER-SETUP.md](USER-SETUP.md#antigravity-sign-in)).
 
-The last row is the one to understand. Antigravity's Google sign-in, like Gemini
-CLI's, carries the `cloud-platform` OAuth scope, and the token sits where the agent
-can read it. Signed in with a Broad identity, the agy container therefore holds a
-Google Cloud credential: exactly what the rest of this design keeps out (no
-`gcloud`, no ADC, Terra only through fiss-mcp). Users are steered to the first two
-rows in [USER-SETUP.md](USER-SETUP.md#antigravity-sign-in).
+That is also the safer route. Antigravity's Google sign-in, like Gemini CLI's,
+carries the `cloud-platform` OAuth scope, and the token sits where the agent can
+read it. A Broad identity there would put a Broad Google Cloud credential in the
+container: exactly what the rest of this design keeps out (no `gcloud`, no ADC,
+Terra only through fiss-mcp). A personal account with no Broad access gives that
+token nothing of Broad's to reach, which is why the docs ask for one.
+
+The launcher also still supports a Gemini API key (`GEMINI_API_KEY` in the env
+file, which reaches only the Gemini API), as an alternative to the sign-in.
 
 `GEMINI_API_KEY` is forwarded with `-e GEMINI_API_KEY`, by name, so its value never
 appears in the podman command line that `ps` shows other users. agy ignores the key

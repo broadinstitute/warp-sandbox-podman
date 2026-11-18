@@ -5,7 +5,14 @@
 # multi-registry search list, so a short name makes it stop and ask which
 # registry to use — which hangs (then fails) a non-interactive build.
 # Qualifying is a no-op for Docker and required for podman.
+#
+# uv comes from Astral's published image, at the newest release on every build:
+# scripts/resolve-latest.sh passes UV_VERSION. A FROM line can only use an ARG
+# declared before the first FROM, hence up here; `latest` is only a fallback for
+# a bare `podman build`.
+ARG UV_VERSION=latest
 FROM docker.io/library/eclipse-temurin:17-jdk AS temurin
+FROM ghcr.io/astral-sh/uv:${UV_VERSION} AS uv
 
 # Node 24: the maintenance LTS line (supported to April 2028). Claude Code needs
 # Node >= 18; the bump from 22 is for base-image security support, not features.
@@ -72,10 +79,16 @@ RUN userdel -r node 2>/dev/null || true && \
     chmod 440 /etc/sudoers.d/claude && \
     chown -R claude:claude /usr/local/cargo /usr/local/rustup
 
-# uv, pinned, copied from Astral's published image. Preferred over `curl | sh`
-# (no network fetch inside a RUN layer) and over `pip install uv` (no pip
-# bootstrap, which is the thing we are removing). Bump this tag to update uv.
-COPY --from=ghcr.io/astral-sh/uv:0.13.9 /uv /uvx /usr/local/bin/
+# uv, copied from Astral's published image (the `uv` stage at the top), at the
+# newest release as of the build. Preferred over `curl | sh` (no network fetch
+# inside a RUN layer) and over `pip install uv` (no pip bootstrap, which is the
+# thing we are removing). The ENV records the version and keeps the layer cache
+# honest: a new uv rebuilds from here on, including the venv below. uv itself
+# does not read UV_VERSION.
+ARG UV_VERSION
+ENV UV_VERSION=${UV_VERSION}
+COPY --from=uv /uv /uvx /usr/local/bin/
+RUN uv --version
 
 # Python environment, built by uv rather than `python3 -m venv` + pip.
 #
