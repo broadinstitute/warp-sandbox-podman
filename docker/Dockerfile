@@ -44,11 +44,13 @@ RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | \
 # thing that produced the bind-mounted-credentials persistence bug
 # (see commit ee421d5).
 #
-# The version is the npm `stable` dist-tag at the time of the bump, which trails
-# `latest` by about a week and skips releases with known regressions. A shared
-# host cannot self-update, so it should not sit on the bleeding edge either.
-# scripts/bump-versions.sh prints both tags and rewrites this line.
-ENV CLAUDE_CODE_VERSION=2.1.311
+# The version is normally the npm `stable` dist-tag at the time of the bump, which
+# skips releases with known regressions. A shared host cannot self-update, so it
+# should not sit on the bleeding edge either. Exception, 2026-11-18: 2.1.327
+# (`latest`), because `stable` was still 2.1.311 and Claude Fable 5.2 needs
+# 2.1.321 or later. scripts/bump-versions.sh prints both tags, rewrites this line,
+# and never moves it backwards, so `stable` takes over again once it passes this.
+ENV CLAUDE_CODE_VERSION=2.1.327
 RUN npm install -g "@anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}" \
     && claude --version
 

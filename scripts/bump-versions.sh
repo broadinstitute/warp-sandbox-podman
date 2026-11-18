@@ -57,6 +57,15 @@ new_hr=$(curl -fsSL https://pypi.org/pypi/headroom-ai/json | jq -r .info.version
 [[ -n "$new_claude" && -n "$new_agy" && -n "$new_cg" && -n "$new_uv" && -n "$new_hr" ]] \
     || { echo "could not resolve every latest version; nothing changed" >&2; exit 1; }
 
+# Never move Claude Code backwards. The pin can be ahead of `stable` on purpose
+# (e.g. a model only newer releases know); stable takes over once it catches up.
+claude_note=""
+if [[ "$new_claude" != "$cur_claude" \
+      && "$(printf '%s\n%s\n' "$cur_claude" "$new_claude" | sort -V | tail -1)" == "$cur_claude" ]]; then
+    claude_note="  (claude: pinned ahead of the ${CHANNEL} channel, which is at ${new_claude}; kept)"
+    new_claude="$cur_claude"
+fi
+
 changed=0
 row() { # name pinned available
     local mark="  "
@@ -70,6 +79,7 @@ row "codegraph"   "$cur_cg"     "$new_cg"
 row "uv"          "$cur_uv"     "$new_uv"
 row "headroom"    "$cur_hr"     "$new_hr"
 echo "  (claude channel: ${CHANNEL})"
+[[ -n "$claude_note" ]] && echo "$claude_note"
 
 if (( ! changed )); then echo "Everything is current."; exit 0; fi
 if (( ! APPLY )); then echo; echo "Re-run with --apply to rewrite docker/Dockerfile."; exit 0; fi
