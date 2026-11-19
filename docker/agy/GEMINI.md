@@ -94,13 +94,13 @@ what evidence. Write for a reader who was not in the loop.
 
   **Context.** State of the project; the user-facing goal.
   **Decision / action.** What you did, with `path:line` references.
-  **Why.** The reasoning, alternatives considered, constraints.
+  **Why.** Engineering rationale, alternatives considered, constraints.
   **Evidence.** Commands run and outputs observed, commit SHAs, test results.
   **Outcome.** What changed; follow-ups created.
   ```
 
-- Use UTC timestamps. Record the wrong guesses and reversals too; if you change
-  your mind about an earlier entry, add a new entry that references it rather than
-  editing history.
+- Use UTC timestamps. Record failed experiments, dead ends, and reversals too; if
+  new evidence overturns an earlier entry, add a new entry that references it
+  rather than editing history.
 - At the end of a long task, append a "Session summary" entry: what to read first,
   the two or three most important findings, open questions, blockers.

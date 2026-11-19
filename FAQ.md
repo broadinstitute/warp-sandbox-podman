@@ -158,6 +158,30 @@ Two causes, both fixed on the sandbox side on 2026-11-19:
   you still see it, you are in a session started before the fix: exit it first,
   because `sandbox claude` reattaches to a running session.
 
+### `API Error: Opus 5.5's safeguards flagged this message` (`Details: [reasoning_extraction]`)
+
+Fixed on the sandbox side on 2026-11-19. An earlier version of the shipped
+`claude-sandbox-shared/.claude/CLAUDE.md` audit-log instructions told the agent to
+"show the actual reasoning, not a sanitized post-hoc summary" in `JOURNAL.md`.
+Opus 5.5's anti-distillation classifier (`reasoning_extraction`) treated that
+standing instruction as a request to extract raw chain-of-thought and refused even
+routine repository questions on the first turn.
+
+To pick up the fix after the shared checkout has been pulled:
+
+1. **Exit your running Claude session first** (`/exit` inside it). `sandbox claude`
+   reattaches to an existing tmux session, which keeps the old `CLAUDE.md` in
+   memory, and `sandbox update` refuses to run while a sandbox container is up.
+2. Refresh your per-user `shared/.claude/CLAUDE.md`:
+
+   ```bash
+   sandbox update
+   ```
+
+3. Start a **fresh** session (`sandbox claude`), not `--continue` or `--resume` on
+   a session that already hit the refusal — that transcript still carries the old
+   instructions and refusal turns.
+
 ### My SSH dropped: how do I reconnect to the session?
 
 **With the `sandbox` command, you reattach:** log back in and run the same command

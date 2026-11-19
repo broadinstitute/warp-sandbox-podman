@@ -143,8 +143,8 @@ diff — do NOT need an entry. Quality over quantity.
 **Decision / action.** What I did, in one or two sentences. Reference
 files with `path:line`.
 
-**Why.** The reasoning. Alternatives considered and why rejected.
-Hypotheses tested. Constraints that forced the choice.
+**Why.** Engineering rationale, alternatives considered and why rejected,
+hypotheses tested, and constraints that shaped the choice.
 
 **Evidence.** Commands run, outputs observed, links to commits, test
 results, metric numbers. Quote verbatim when short; otherwise reference
@@ -158,17 +158,14 @@ Use UTC timestamps so entries sort correctly across hosts. Reference
 git SHAs of any commits you make in this step. If a step spans many
 small commits, link the range, not each one.
 
-## Reasoning fidelity
+## Dead ends and reversals
 
-The journal should show the actual reasoning, not a sanitized post-hoc
-summary. Include the wrong guesses, the rejected designs, the moments
-where the evidence flipped your direction. Those are the load-bearing
-parts of a research write-up. A clean narrative that hides the dead
-ends is less useful, not more.
-
-If you change your mind about a previous entry, add a new entry that
-references the old one ("see 2026-06-03T14:22Z — that hypothesis was
-wrong because …"). Do not edit history.
+Include failed experiments, rejected designs, and empirical observations
+that changed the plan — a clean narrative that omits dead ends is less
+useful for a research write-up. If new evidence overturns an earlier
+entry, append a new entry referencing the earlier timestamp ("see
+2026-06-03T14:22Z — that hypothesis failed when …") rather than editing
+history.
 
 ## Surfacing on exit
 
