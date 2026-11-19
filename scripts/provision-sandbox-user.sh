@@ -39,6 +39,29 @@ ok()    { echo "  ${GRN}ok${RST}      $*"; }
 warn()  { echo "  ${YEL}warn${RST}    $*"; }
 fatal() { echo "  ${RED}FAIL${RST}    $*"; FAIL=1; }
 
+# refresh_settings SRC DST
+# settings.json is the repo's, except for what each user picks inside Claude and
+# Claude saves into this same file: the theme (Dark or Light, from the first-run
+# picker or /theme). The repo sets no theme, so a refresh carries the user's
+# over; replacing the file outright reset every user to the default on each
+# `sandbox update`. Unchanged apart from that: a true no-op.
+refresh_settings() {
+    local src="$1" dst="$2" merged=""
+    [[ -e "$src" ]] || return 0
+    if [[ -f "$dst" ]]; then
+        merged=$(jq --slurpfile cur "$dst" \
+                    '. + ($cur[0] | {theme} | with_entries(select(.value != null)))' \
+                    "$src" 2>/dev/null) || merged=""
+    fi
+    if [[ -z "$merged" ]]; then
+        # New user, or a file jq cannot read: take the repo's as it is.
+        diff -q "$src" "$dst" >/dev/null 2>&1 || cp -a "$src" "$dst"
+        return 0
+    fi
+    [[ "$(jq -cS . "$dst" 2>/dev/null)" == "$(jq -cS . <<<"$merged")" ]] && return 0
+    printf '%s\n' "$merged" > "${dst}.sandbox-tmp" && mv "${dst}.sandbox-tmp" "$dst"
+}
+
 # refresh_shared_claude SRC DST
 # Re-copy the files the CHECKOUT owns into an ALREADY-provisioned user's
 # shared/.claude, leaving their OAuth token and session state untouched. The
@@ -60,12 +83,13 @@ refresh_shared_claude() {
     # Each is replaced only when it differs, so a re-run with nothing new is a
     # true no-op. rm-then-cp (not cp -f) so a file DELETED upstream — a hook or
     # skill dropped in a bump — also disappears from the user's copy.
-    for p in CLAUDE.md settings.json hooks skills; do
+    for p in CLAUDE.md hooks skills; do
         [[ -e "${src}/${p}" ]] || continue
         diff -rq "${src}/${p}" "${dst}/${p}" >/dev/null 2>&1 && continue
         rm -rf "${dst:?}/${p}"
         cp -a "${src}/${p}" "${dst}/${p}"
     done
+    refresh_settings "${src}/settings.json" "${dst}/settings.json"
     # The pin ledger of the plugins the repo used to vendor, gone from the repo.
     rm -f "${dst}/PLUGIN_PINS.md"
     # .caveman-active is caveman's on/off switch, which the plugin itself writes.

@@ -35,9 +35,14 @@ if [ -n "$STATUSLINE_INPUT" ] && command -v jq >/dev/null 2>&1; then
         | jq -r '.model.display_name // .model.id // empty' 2>/dev/null)
 fi
 
-# Effort comes from CLAUDE_EFFORT env (set by the launcher / env.*.sh); if
-# unset, we don't invent a value — better to omit the segment than to lie.
-EFFORT="${CLAUDE_EFFORT:-}"
+# Effort: the level Claude Code reports in the statusline JSON (.effort.level,
+# present for models that have one, and following /effort), else CLAUDE_EFFORT.
+# Neither present: the segment is left out rather than invented.
+EFFORT=""
+if [ -n "$STATUSLINE_INPUT" ] && command -v jq >/dev/null 2>&1; then
+    EFFORT=$(printf '%s' "$STATUSLINE_INPUT" | jq -r '.effort.level // empty' 2>/dev/null)
+fi
+EFFORT="${EFFORT:-${CLAUDE_EFFORT:-}}"
 
 # Dim gray so this segment sits back visually and lets the badges pop.
 DIM=$'\033[38;5;244m'

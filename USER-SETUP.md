@@ -94,6 +94,12 @@ and run commands without prompting. The sandbox's deny rules still hold, such as
 `git push`. To get Antigravity's prompts back, choose `request-review` under
 `/config` → Tool Permission; that choice stays.
 
+**Light or dark terminal.** Claude's first launch asks for a text style. Pick
+**Dark mode** if your terminal's background is dark and **Light mode** if it is
+light: the wrong one draws parts of the screen in your background colour, such as
+the model and effort shown under the prompt. Change it any time with `/theme`;
+the choice stays through `sandbox update`.
+
 **Commit inside, push outside.** The container holds no git credentials, so the
 agent can commit but not push. Review and push from the host:
 

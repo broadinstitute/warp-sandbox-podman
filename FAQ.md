@@ -143,6 +143,21 @@ same version, and the launcher sets `DISABLE_AUTOUPDATER=1`. An in-place
 self-update would be lost on the next container exit anyway. For a newer version,
 ask the admin to rebuild; `sandbox status` shows the one you have.
 
+### Some of Claude's text is invisible (the model, effort, hints, the sign-in link)
+
+Two causes, both fixed on the sandbox side on 2026-11-19:
+
+- **Claude's theme does not match your terminal.** Dark mode on a light background,
+  or Light mode on a dark one, draws some text in your background colour. Run
+  `/theme` and pick the one for your terminal. `sandbox update` used to reset
+  everyone to Dark; it now keeps your choice.
+- **Faint text in your terminal's own palette.** Inside the container the terminal
+  type was plain `xterm`, so Claude drew faint text, the sign-in URL included, as
+  "dim white" from your colour scheme, which some schemes hide entirely. The
+  launcher now passes a 256-colour terminal type, and that text is a fixed grey. If
+  you still see it, you are in a session started before the fix: exit it first,
+  because `sandbox claude` reattaches to a running session.
+
 ### My SSH dropped: how do I reconnect to the session?
 
 **With the `sandbox` command, you reattach:** log back in and run the same command
