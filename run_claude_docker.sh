@@ -1054,6 +1054,21 @@ if [[ "$SANDBOX_AGENT" == "agy" ]]; then
   [[ -n "${GOOGLE_GEMINI_BASE_URL:-}" ]] && AGENT_ENV+=(-e GOOGLE_GEMINI_BASE_URL)
 fi
 
+# The container's TERM. Left to podman it is `xterm`, an 8-colour terminal, and
+# Claude Code then draws its faint text as dim white from the user's own ANSI
+# palette (ESC[2m ESC[37m). Some terminal colour schemes render that as
+# nothing: on 2026-11-19 a user's macOS Terminal showed "Browser didn't open?
+# Use the URL below to sign in" with the sign-in URL itself invisible. With a
+# 256-colour TERM the same text is a fixed grey (ESC[38;5;246m) that every
+# scheme shows. The host's own TERM is used when the image knows it (sandbox
+# runs inside tmux, so usually tmux-256color), otherwise xterm-256color; dumb or
+# empty is left alone.
+case "${TERM:-}" in
+  xterm-256color|tmux-256color|screen-256color) AGENT_ENV+=(-e "TERM=${TERM}") ;;
+  ""|dumb) ;;
+  *) AGENT_ENV+=(-e TERM=xterm-256color) ;;
+esac
+
 # Make it so. Any args ($@) are passed to the agent inside the container —
 # e.g. --resume <id>, --continue, --dangerously-skip-permissions.
 # To drop into a shell instead, swap `claude "$@"` below for `/bin/bash`.
