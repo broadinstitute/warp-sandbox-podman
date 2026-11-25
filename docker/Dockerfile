@@ -56,7 +56,7 @@ RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | \
 #
 # The installer is fetched from the SAME tag it installs, not from `main`: an
 # unpinned installer script can change what a pinned version means.
-ENV CODEGRAPH_VERSION=v1.6.3
+ENV CODEGRAPH_VERSION=v1.6.4
 RUN curl -fsSL "https://raw.githubusercontent.com/colbymchenry/codegraph/${CODEGRAPH_VERSION}/install.sh" \
     | CODEGRAPH_INSTALL_DIR=/opt/codegraph CODEGRAPH_BIN_DIR=/usr/local/bin sh \
     && /usr/local/bin/codegraph --version
@@ -139,7 +139,7 @@ RUN uv venv --python "${CLAUDE_VENV_PYTHON}" /opt/claude-venv && \
     uv pip install --python /opt/claude-venv/bin/python --no-cache \
       numpy pandas matplotlib scipy scikit-learn seaborn \
       ipython jupyter requests anndata "scanpy[leiden]" "numba<0.67" \
-      "headroom-ai[proxy]==0.44.0" && \
+      "headroom-ai[proxy]==0.45.0" && \
     chown -R claude:claude /opt/claude-venv /opt/uv-python
 
 # fiss-mcp lives on the HOST, not in the container. The launcher

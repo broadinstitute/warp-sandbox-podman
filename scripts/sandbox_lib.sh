@@ -272,7 +272,7 @@ sb_collect_env_workdirs() {
         local base name
         base=$(basename "$f" .sh)
         name=${base#env.}
-        [ "$name" = "example" ] && continue
+        [[ "$name" == "example" || "$name" == *.example ]] && continue
         # Match: optional leading "#" + ws, then "export ", then VAR=value.
         # Strip leading "#", strip "export ", strip surrounding quotes from value.
         sed -nE 's/^[[:space:]]*#?[[:space:]]*export[[:space:]]+CLAUDE_SANDBOX_PROJECTS_DIR=(.*)$/\1/p' "$f" \

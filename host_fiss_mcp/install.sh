@@ -63,8 +63,8 @@ REPO_URL="https://github.com/broadinstitute/fiss-mcp.git"
 # Pinned release. Bump together with anything that depends on new fiss-mcp
 # features. The marker file below keys off this string, so any change here
 # triggers a full reinstall on the next setup_host.sh run.
-FISS_MCP_REF="1.0.6"
-FISS_MCP_REF_COMMIT="a4becf1cfadd0a94678f2383b6de9273a0bbebd5"
+FISS_MCP_REF="2.0.0"
+FISS_MCP_REF_COMMIT="b269762bef26f113a9972cfa1519b4216b526bf2"
 
 # Interpreter version for the venv.
 #
@@ -148,9 +148,12 @@ if [[ ! -f "${MARKER}" ]] || ! grep -q -x -F "${EXPECTED_MARKER}" "${MARKER}"; t
   # setuptools<80 first: firecloud builds via legacy setup.py and breaks on
   # setuptools 80+. --no-build-isolation then makes the editable build of
   # fiss-mcp reuse that pinned setuptools instead of pulling a fresh one.
+  # fastmcp<4.3: fiss-mcp 2.0.0 imports SkillsDirectoryProvider from
+  # fastmcp.server.providers.skills, which FastMCP 4.2 deprecates for removal
+  # in 4.3.
   "$UV_BIN" pip install --python "${VENV_DIR}/bin/python" --quiet "setuptools<80"
   "$UV_BIN" pip install --python "${VENV_DIR}/bin/python" --quiet \
-    --no-build-isolation -e "${SRC_DIR}"
+    --no-build-isolation -e "${SRC_DIR}" "fastmcp<4.3"
   echo "${EXPECTED_MARKER}" > "${MARKER}"
 fi
 

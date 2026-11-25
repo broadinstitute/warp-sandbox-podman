@@ -26,7 +26,17 @@ SELF="$(readlink -f "${BASH_SOURCE[0]}")"
 REPO_ROOT="$(cd "$(dirname "$SELF")/.." && pwd)"
 SANDBOX_ROOT="${CLAUDE_SANDBOX_ROOT:-/mnt/sandbox}"
 USER_ROOT="${SANDBOX_ROOT}/users/${USER}"
-ENV_FILE="${SANDBOX_ENV_FILE:-${USER_ROOT}/env.${USER}.sh}"
+if [[ -n "${SANDBOX_ENV_FILE:-}" ]]; then
+    ENV_FILE="$SANDBOX_ENV_FILE"
+elif [[ -f "${USER_ROOT}/env.${USER}.sh" || -d "$SANDBOX_ROOT" ]]; then
+    ENV_FILE="${USER_ROOT}/env.${USER}.sh"
+elif [[ -f "${REPO_ROOT}/env.${USER}.sh" ]]; then
+    ENV_FILE="${REPO_ROOT}/env.${USER}.sh"
+elif [[ -f "${REPO_ROOT}/env.main.sh" ]]; then
+    ENV_FILE="${REPO_ROOT}/env.main.sh"
+else
+    ENV_FILE="${USER_ROOT}/env.${USER}.sh"
+fi
 
 RED=$'\033[1;31m'; YEL=$'\033[1;33m'; GRN=$'\033[1;32m'; DIM=$'\033[2m'; RST=$'\033[0m'
 
@@ -154,16 +164,24 @@ status() {
             echo "  Google      ${YEL}not logged in${RST} (only Terra/fiss-mcp needs it) — sandbox setup"
         fi
     fi
-    if [[ -n "${CLAUDE_SANDBOX_FISS_ROOT:-}" ]]; then
-        if [[ -x "${CLAUDE_SANDBOX_FISS_ROOT}/venv/bin/python" ]]; then
-            echo "  fiss-mcp    venv ready"
+    local fiss_root="${CLAUDE_SANDBOX_FISS_ROOT:-}"
+    [[ -z "$fiss_root" && ! -d "$SANDBOX_ROOT" && -d "${REPO_ROOT}/host_fiss_mcp" ]] \
+        && fiss_root="${REPO_ROOT}/host_fiss_mcp"
+    if [[ -n "$fiss_root" ]]; then
+        if [[ -x "${fiss_root}/venv/bin/python" ]]; then
+            echo "  fiss-mcp    venv ready$([[ "${FISS_MCP:-1}" == "0" ]] && echo " (disabled: FISS_MCP=0)")"
         else
             echo "  fiss-mcp    ${YEL}no venv${RST} — sandbox setup"
         fi
     fi
 
     # Agent sign-ins live in the state the containers mount.
-    local state="${CLAUDE_SANDBOX_SHARED:-${USER_ROOT}/shared}"
+    local state
+    if [[ "${CLAUDE_SANDBOX_USE_SHARED:-0}" == "1" ]]; then
+        state="${CLAUDE_SANDBOX_SHARED:-${REPO_ROOT}/claude-sandbox-shared}"
+    else
+        state="${CLAUDE_SANDBOX_HOME:-${USER_ROOT}/shared}"
+    fi
     if [[ -s "${state}/.claude/.credentials.json" ]]; then
         echo "  Claude      signed in"
     else

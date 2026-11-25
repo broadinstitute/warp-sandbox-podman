@@ -58,8 +58,8 @@ command -v fzf >/dev/null 2>&1 || {
     echo "fzf is required. Install: sudo apt-get install -y fzf" >&2
     exit 1
 }
-command -v docker >/dev/null 2>&1 || {
-    echo "docker is required." >&2
+command -v "$SB_ENGINE" >/dev/null 2>&1 || {
+    echo "${SB_ENGINE} is required (set CLAUDE_SANDBOX_ENGINE to podman or docker)." >&2
     exit 1
 }
 
@@ -225,7 +225,7 @@ declare -a AREAS=()
 for f in "${ENV_FILES[@]}"; do
     base="$(basename "$f" .sh)"
     name="${base#env.}"
-    [[ "$name" == "example" || -z "$name" || "$base" == "env" ]] && continue
+    [[ "$name" == "example" || "$name" == *.example || -z "$name" || "$base" == "env" ]] && continue
     AREAS+=("$name")
 done
 
@@ -610,8 +610,12 @@ persist_toggles() {
         echo "$MARK_BEGIN"
         echo "# Managed by start_sandbox.sh — toggle via the menu, not by hand."
         if [ "$HR" = 1 ]; then echo "export HEADROOM=1"; else echo "export HEADROOM=0"; fi
-        echo "export FISS_MCP=1"
-        if [ "$FW" = 1 ]; then echo "export FISS_MCP_ALLOW_WRITES=1"; else echo "export FISS_MCP_ALLOW_WRITES=0"; fi
+        if [ "$FW" = 1 ]; then
+            echo "export FISS_MCP=1"
+            echo "export FISS_MCP_ALLOW_WRITES=1"
+        else
+            echo "export FISS_MCP_ALLOW_WRITES=0"
+        fi
         if [ "$VX" = 1 ]; then
             printf 'source "%s/SET_VERTEX_MODE.sh"\n' "$SCRIPT_DIR"
         else
